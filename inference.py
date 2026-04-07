@@ -490,11 +490,15 @@ def parse_args() -> argparse.Namespace:
         help="Number of episodes per difficulty level (default: 5)",
     )
     parser.add_argument(
-        "--agent",
+        "--use-llm",
+        action="store_true",
+        help="Use OpenAI agent for inference (requires OPENAI_API_KEY). Falls back to rule-based if absent.",
+    )
+    parser.add_argument(
+        "--model",
         type=str,
-        choices=["rule", "heuristic", "openai"],
-        default="rule",
-        help="Agent type to use (default: rule)",
+        default="gpt-4o-mini",
+        help="LLM model string to use if --use-llm is provided (default: gpt-4o-mini)",
     )
     return parser.parse_args()
 
@@ -511,13 +515,25 @@ def main() -> None:
     if server_process is not None:
         atexit.register(cleanup_process, server_process)
 
-    agent = create_agent(args.agent)
+    if args.use_llm:
+        if not os.getenv("OPENAI_API_KEY"):
+            print("  [!] --use-llm specified but OPENAI_API_KEY is missing. Falling back to rule-based agent.")
+            agent = RuleBasedAgent()
+            agent_label = "Rule-based (fallback)"
+        else:
+            agent = OpenAIInvoiceAgent()
+            agent._model = args.model  # Override model via CLI
+            agent_label = f"OpenAI ({args.model})"
+    else:
+        agent = RuleBasedAgent()
+        agent_label = "Rule-based"
+
     metrics = RunMetrics()
     metrics._seed = args.seed
 
     print("=" * 60)
     print("  Invoice Verification - Inference Run")
-    print(f"  Agent: {args.agent}  |  Seed: {args.seed}  |  Episodes/diff: {args.episodes}")
+    print(f"  Agent: {agent_label}  |  Seed: {args.seed}  |  Episodes/diff: {args.episodes}")
     print("=" * 60)
 
     difficulty_scores: Dict[str, float] = {}
