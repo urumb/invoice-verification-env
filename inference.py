@@ -16,18 +16,23 @@ from env.models import Action
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_URL = os.getenv("INVOICE_ENV_URL", "http://127.0.0.1:7860")
+BASE_URL = os.getenv("INVOICE_ENV_URL", "http://127.0.0.1:8000")
 EPISODES_PER_DIFFICULTY = int(os.getenv("INVOICE_EPISODES", "5"))
 
-POLICY_PROMPT = """You are evaluating employee invoices against company policy.
+POLICY_PROMPT = """\
+You are evaluating employee invoices against company policy.
 
 Approve when the expense has a clear business purpose, acceptable documentation, and does not violate spending policy.
 Reject when the expense is personal, undocumented, excessive, fraudulent, or violates policy.
 
-Return strict JSON with:
-- decision: "approve" or "reject"
-- reason: concise policy-based explanation
-- confidence: float between 0 and 1
+You MUST respond with ONLY valid JSON — no markdown, no code fences, no extra text.
+Return strict JSON with exactly these keys:
+- "decision": "approve" or "reject"
+- "reason": concise policy-based explanation (string)
+- "confidence": float between 0 and 1
+
+Example:
+{"decision": "reject", "reason": "Personal expense not reimbursable under policy.", "confidence": 0.92}
 """
 
 
@@ -41,8 +46,15 @@ def cleanup_process(process: Optional[subprocess.Popen]) -> None:
     if process is None or process.poll() is not None:
         return
     process.terminate()
-    process.wait(timeout=5)
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
+
+# ---------------------------------------------------------------------------
+# Heuristic fallback agent (no API key needed)
+# ---------------------------------------------------------------------------
 
 class HeuristicInvoiceAgent:
     def predict(self, invoice: Dict[str, Any]) -> Action:
@@ -52,33 +64,14 @@ class HeuristicInvoiceAgent:
         receipt = bool(invoice.get("receipt", False))
 
         reject_terms = [
-            "personal",
-            "birthday",
-            "gaming",
-            "grocery",
-            "household",
-            "luxury",
-            "alcohol",
-            "first-class",
-            "first class",
-            "spa",
+            "personal", "birthday", "gaming", "grocery", "household",
+            "luxury", "alcohol", "first-class", "first class", "spa",
             "video game",
         ]
         approve_terms = [
-            "client",
-            "conference",
-            "training",
-            "software",
-            "hosting",
-            "office",
-            "business",
-            "professional",
-            "remote work",
-            "stipend",
-            "wellness program",
-            "overtime",
-            "candidate",
-            "laptop",
+            "client", "conference", "training", "software", "hosting",
+            "office", "business", "professional", "remote work", "stipend",
+            "wellness program", "overtime", "candidate", "laptop",
         ]
 
         if "team-building" in description or "team building" in description:
@@ -95,7 +88,9 @@ class HeuristicInvoiceAgent:
                 confidence=0.88,
             )
 
-        if category in {"personal", "groceries", "entertainment"} or any(term in description for term in reject_terms):
+        if category in {"personal", "groceries", "entertainment"} or any(
+            term in description for term in reject_terms
+        ):
             return Action(
                 decision="reject",
                 reason="Rejected because the expense appears personal or policy violating rather than a valid business expense.",
@@ -117,18 +112,9 @@ class HeuristicInvoiceAgent:
             )
 
         if any(term in description for term in approve_terms) or category in {
-            "office_supplies",
-            "office_equipment",
-            "electronics",
-            "software",
-            "training",
-            "travel",
-            "transportation",
-            "infrastructure",
-            "legal",
-            "accommodation",
-            "health",
-            "rent",
+            "office_supplies", "office_equipment", "electronics", "software",
+            "training", "travel", "transportation", "infrastructure", "legal",
+            "accommodation", "health", "rent",
         }:
             return Action(
                 decision="approve",
@@ -143,14 +129,20 @@ class HeuristicInvoiceAgent:
         )
 
 
+# ---------------------------------------------------------------------------
+# OpenAI-powered agent
+# ---------------------------------------------------------------------------
+
 class OpenAIInvoiceAgent:
     def __init__(self) -> None:
         self._fallback = HeuristicInvoiceAgent()
         self._api_key = os.getenv("OPENAI_API_KEY")
-        self._model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self._client: Optional[OpenAI] = OpenAI(api_key=self._api_key) if self._api_key else None
+        self._model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+        self._client: Optional[OpenAI] = (
+            OpenAI(api_key=self._api_key) if self._api_key else None
+        )
 
-    def predict(self, invoice: Dict[str, Any]) -> Action:
+    def predict(self, invoice: Dict[str, Any]) -> Optional[Action]:
         if self._client is None:
             return self._fallback.predict(invoice)
 
@@ -168,11 +160,43 @@ class OpenAIInvoiceAgent:
                 ],
             )
             content = completion.choices[0].message.content or "{}"
-            payload = json.loads(content)
+            payload = _safe_parse_json(content)
+            if payload is None:
+                print(f"  ⚠ LLM returned unparseable JSON, falling back to heuristic.")
+                return self._fallback.predict(invoice)
             return Action(**payload)
-        except Exception:
+        except Exception as exc:
+            print(f"  ⚠ OpenAI call failed ({exc}), falling back to heuristic.")
             return self._fallback.predict(invoice)
 
+
+# ---------------------------------------------------------------------------
+# Safe JSON parsing
+# ---------------------------------------------------------------------------
+
+def _safe_parse_json(text: str) -> Optional[Dict[str, Any]]:
+    """Try to parse JSON; return None on failure instead of raising."""
+    # Strip markdown code fences if the model wraps the response
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        stripped = "\n".join(lines)
+
+    try:
+        data = json.loads(stripped)
+        if isinstance(data, dict):
+            return data
+        print(f"  ⚠ JSON parsed but got {type(data).__name__} instead of dict.")
+        return None
+    except json.JSONDecodeError as exc:
+        print(f"  ⚠ JSON parse error: {exc}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Server management
+# ---------------------------------------------------------------------------
 
 def is_server_ready(base_url: str) -> bool:
     try:
@@ -188,10 +212,13 @@ def ensure_server(base_url: str) -> Optional[subprocess.Popen]:
 
     parsed = urlparse(base_url)
     host = parsed.hostname or "127.0.0.1"
-    port = parsed.port or 7860
+    port = parsed.port or 8000
 
     process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(port)],
+        [
+            sys.executable, "-m", "uvicorn",
+            "api.main:app", "--host", host, "--port", str(port),
+        ],
         cwd=ROOT_DIR,
     )
 
@@ -205,33 +232,56 @@ def ensure_server(base_url: str) -> Optional[subprocess.Popen]:
     raise RuntimeError("FastAPI server did not start in time.")
 
 
-def evaluate_difficulty(agent: OpenAIInvoiceAgent, difficulty: str, episodes: int) -> float:
-    rewards = []
+# ---------------------------------------------------------------------------
+# Evaluation loop
+# ---------------------------------------------------------------------------
+
+def evaluate_difficulty(
+    agent: OpenAIInvoiceAgent, difficulty: str, episodes: int
+) -> float:
+    rewards: list[float] = []
 
     for episode in range(1, episodes + 1):
-        reset_response = requests.post(
+        # ── Reset ──
+        reset_resp = requests.post(
             f"{BASE_URL}/reset",
             json={"difficulty": difficulty},
             timeout=10,
         )
-        reset_response.raise_for_status()
-        observation = reset_response.json()
+        reset_resp.raise_for_status()
+        observation = reset_resp.json()
 
+        # ── Predict ──
         action = agent.predict(observation["invoice"])
-        step_response = requests.post(
+        if action is None:
+            print(f"  [{difficulty}] episode {episode}: SKIPPED (no valid action)")
+            continue
+
+        # ── Step ──
+        step_resp = requests.post(
             f"{BASE_URL}/step",
             json=model_to_dict(action),
             timeout=10,
         )
-        step_response.raise_for_status()
-        result = step_response.json()
-        rewards.append(float(result["reward"]))
+        step_resp.raise_for_status()
+        result = step_resp.json()
+
+        reward = float(result["reward"])
+        info = result["info"]
+        rewards.append(reward)
+
+        decision_status = "✓" if info.get("decision_correct") else "✗"
+        matched = info.get("matched_keywords", [])
 
         print(
-            f"[{difficulty}] episode {episode}: decision={action.decision} "
-            f"reward={result['reward']:.2f} info={result['info']}"
+            f"  [{difficulty}] episode {episode}: "
+            f"decision={action.decision} [{decision_status}]  "
+            f"reward={reward:.2f}  "
+            f"keywords_matched={len(matched)}"
         )
 
+    if not rewards:
+        return 0.0
     return sum(rewards) / len(rewards)
 
 
@@ -241,15 +291,28 @@ def main() -> None:
         atexit.register(cleanup_process, server_process)
 
     agent = OpenAIInvoiceAgent()
-    overall_scores = {}
+
+    print("=" * 60)
+    print("  Invoice Verification — Inference Run")
+    print("=" * 60)
+
+    overall_scores: Dict[str, float] = {}
 
     for difficulty in ("easy", "medium", "hard"):
-        average_reward = evaluate_difficulty(agent, difficulty, EPISODES_PER_DIFFICULTY)
-        overall_scores[difficulty] = average_reward
-        print(f"{difficulty} average reward: {average_reward:.2f}")
+        print(f"\n── {difficulty.upper()} ({EPISODES_PER_DIFFICULTY} episodes) ──")
+        avg = evaluate_difficulty(agent, difficulty, EPISODES_PER_DIFFICULTY)
+        overall_scores[difficulty] = avg
+        print(f"  → {difficulty} average reward: {avg:.2f}")
 
-    grand_average = sum(overall_scores.values()) / len(overall_scores)
-    print(f"overall average reward: {grand_average:.2f}")
+    grand_avg = sum(overall_scores.values()) / len(overall_scores)
+
+    print("\n" + "=" * 60)
+    print("  Summary")
+    print("=" * 60)
+    for diff, score in overall_scores.items():
+        print(f"  {diff:>8s}: {score:.2f}")
+    print(f"  {'overall':>8s}: {grand_avg:.2f}")
+    print("=" * 60)
 
     cleanup_process(server_process)
 

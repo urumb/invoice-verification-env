@@ -1,6 +1,11 @@
 name: invoice-verification-env
-description: OpenEnv-compatible environment for approving or rejecting invoices against company policy.
-action_schema:
+description: >
+  OpenEnv-compatible environment for approving or rejecting employee invoices
+  against company policy. An agent receives an invoice observation and must
+  return an approve/reject decision with a policy-based reason and confidence.
+entrypoint: api.main:app
+
+action_space:
   type: object
   properties:
     decision:
@@ -10,6 +15,7 @@ action_schema:
         - reject
     reason:
       type: string
+      minLength: 1
     confidence:
       type: number
       minimum: 0
@@ -18,24 +24,15 @@ action_schema:
     - decision
     - reason
     - confidence
-observation_schema:
+
+observation_space:
   type: object
   properties:
     invoice:
       type: object
   required:
     - invoice
-state_schema:
-  type: object
-  properties:
-    step_count:
-      type: integer
-      minimum: 0
-    current_invoice:
-      type: object
-  required:
-    - step_count
-    - current_invoice
+
 reward_range:
   - 0
   - 1
