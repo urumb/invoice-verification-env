@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -18,6 +19,8 @@ from env.models import Action
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_URL = os.getenv("INVOICE_ENV_URL", "http://127.0.0.1:8000")
 EPISODES_PER_DIFFICULTY = int(os.getenv("INVOICE_EPISODES", "5"))
+DEFAULT_SEED = int(os.getenv("INVOICE_RANDOM_SEED", "42"))
+DOCKER_BASE_URL = "http://127.0.0.1:7860"
 
 POLICY_PROMPT = """\
 You are evaluating employee invoices against company policy.
@@ -206,6 +209,16 @@ def is_server_ready(base_url: str) -> bool:
         return False
 
 
+def resolve_base_url(base_url: str) -> str:
+    if os.getenv("INVOICE_ENV_URL"):
+        return base_url
+    if is_server_ready(base_url):
+        return base_url
+    if is_server_ready(DOCKER_BASE_URL):
+        return DOCKER_BASE_URL
+    return base_url
+
+
 def ensure_server(base_url: str) -> Optional[subprocess.Popen]:
     if is_server_ready(base_url):
         return None
@@ -214,12 +227,16 @@ def ensure_server(base_url: str) -> Optional[subprocess.Popen]:
     host = parsed.hostname or "127.0.0.1"
     port = parsed.port or 8000
 
+    env = os.environ.copy()
+    env["INVOICE_ENV_SEED"] = str(DEFAULT_SEED)
+
     process = subprocess.Popen(
         [
             sys.executable, "-m", "uvicorn",
             "api.main:app", "--host", host, "--port", str(port),
         ],
         cwd=ROOT_DIR,
+        env=env,
     )
 
     for _ in range(20):
@@ -237,17 +254,13 @@ def ensure_server(base_url: str) -> Optional[subprocess.Popen]:
 # ---------------------------------------------------------------------------
 
 def evaluate_difficulty(
-    agent: OpenAIInvoiceAgent, difficulty: str, episodes: int
+    agent: OpenAIInvoiceAgent, base_url: str, difficulty: str, episodes: int
 ) -> float:
     rewards: list[float] = []
 
     for episode in range(1, episodes + 1):
         # ── Reset ──
-        reset_resp = requests.post(
-            f"{BASE_URL}/reset",
-            json={"difficulty": difficulty},
-            timeout=10,
-        )
+        reset_resp = requests.post(f"{base_url}/reset", json={"difficulty": difficulty}, timeout=10)
         reset_resp.raise_for_status()
         observation = reset_resp.json()
 
@@ -258,11 +271,7 @@ def evaluate_difficulty(
             continue
 
         # ── Step ──
-        step_resp = requests.post(
-            f"{BASE_URL}/step",
-            json=model_to_dict(action),
-            timeout=10,
-        )
+        step_resp = requests.post(f"{base_url}/step", json=model_to_dict(action), timeout=10)
         step_resp.raise_for_status()
         result = step_resp.json()
 
@@ -286,7 +295,9 @@ def evaluate_difficulty(
 
 
 def main() -> None:
-    server_process = ensure_server(BASE_URL)
+    random.seed(DEFAULT_SEED)
+    base_url = resolve_base_url(BASE_URL)
+    server_process = ensure_server(base_url)
     if server_process is not None:
         atexit.register(cleanup_process, server_process)
 
@@ -300,7 +311,7 @@ def main() -> None:
 
     for difficulty in ("easy", "medium", "hard"):
         print(f"\n── {difficulty.upper()} ({EPISODES_PER_DIFFICULTY} episodes) ──")
-        avg = evaluate_difficulty(agent, difficulty, EPISODES_PER_DIFFICULTY)
+        avg = evaluate_difficulty(agent, base_url, difficulty, EPISODES_PER_DIFFICULTY)
         overall_scores[difficulty] = avg
         print(f"  → {difficulty} average reward: {avg:.2f}")
 

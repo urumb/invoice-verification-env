@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .models import Difficulty, TaskRecord
 
@@ -26,8 +26,11 @@ def load_tasks(difficulty: Difficulty) -> List[TaskRecord]:
     return _DATA_CACHE[difficulty]
 
 
-def get_random_task(difficulty: Difficulty) -> TaskRecord:
+def get_random_task(
+    difficulty: Difficulty, rng: Optional[random.Random] = None
+) -> TaskRecord:
     tasks = load_tasks(difficulty)
     if not tasks:
         raise ValueError(f"Dataset for difficulty '{difficulty}' is empty.")
-    return random.choice(tasks)
+    chooser = rng or random
+    return chooser.choice(tasks)
