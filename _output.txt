@@ -1,0 +1,40 @@
+============================================================
+  Invoice Verification - Inference Run
+  Agent: rule  |  Seed: 42  |  Episodes/diff: 3
+============================================================
+
+-- EASY (3 episodes) --
+  [easy] ep  1: decision=reject  [Y]  reward=0.50  conf=0.70  kw=0  refs=0
+  [easy] ep  2: decision=approve [Y]  reward=1.00  conf=0.90  kw=2  refs=4
+  [easy] ep  3: decision=approve [Y]  reward=1.00  conf=0.90  kw=2  refs=4
+  -> easy average reward: 0.8333
+
+-- MEDIUM (3 episodes) --
+  [medium] ep  1: decision=reject  [N]  reward=0.00  conf=0.70  kw=0  refs=0
+  [medium] ep  2: decision=approve [Y]  reward=1.00  conf=0.90  kw=1  refs=4
+  [medium] ep  3: decision=reject  [Y]  reward=0.70  conf=0.90  kw=0  refs=1
+  -> medium average reward: 0.5667
+
+-- HARD (3 episodes) --
+  [hard] ep  1: decision=approve [Y]  reward=1.00  conf=0.90  kw=0  refs=4
+  [hard] ep  2: decision=reject  [Y]  reward=0.50  conf=0.70  kw=0  refs=0
+  [hard] ep  3: decision=reject  [Y]  reward=0.70  conf=0.90  kw=0  refs=1
+  -> hard average reward: 0.7333
+
+============================================================
+  EVALUATION SUMMARY
+============================================================
+
+  Per-Difficulty Rewards:
+        easy: 0.8333  ################
+      medium: 0.5667  ###########
+        hard: 0.7333  ##############
+     overall: 0.7111
+
+  Aggregate Metrics (9 episodes):
+    Accuracy       : 88.89%  (8/9)
+    Approval Rate  : 44.44%
+    Rejection Rate : 55.56%
+    Avg Confidence : 0.8333
+    Avg Reward     : 0.7111
+============================================================

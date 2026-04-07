@@ -108,5 +108,60 @@
     },
     "decision": "approve",
     "keywords": ["home office stipend", "remote work", "approved policy exception", "business support"]
+  },
+  {
+    "invoice": {
+      "amount": 12000.0,
+      "category": "electronics",
+      "date": "2024-03-26",
+      "description": "High-end workstation and dual monitors for CEO home office",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["excessive amount", "over policy cap", "amount exceeds limit", "requires approval"]
+  },
+  {
+    "invoice": {
+      "amount": 980.0,
+      "category": "travel",
+      "date": "2024-03-27",
+      "description": "Client site visit airfare and ground transport with no receipts attached",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["no receipt", "missing documentation", "receipt required", "undocumented"]
+  },
+  {
+    "invoice": {
+      "amount": 600.0,
+      "category": "crypto",
+      "date": "2024-03-28",
+      "description": "Purchase of cryptocurrency tokens for blockchain team research",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["invalid category", "crypto", "not allowed category", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 375.0,
+      "category": "software",
+      "date": "2029-01-15",
+      "description": "Multi-year SaaS license pre-payment billed to future fiscal year",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["future date", "invalid date", "not yet incurred", "date violation"]
+  },
+  {
+    "invoice": {
+      "amount": 1500.0,
+      "category": "travel",
+      "date": "2024-03-29",
+      "description": "Suspicious duplicate submission of previously reimbursed flight",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["duplicate submission", "fraud risk", "no receipt", "suspicious"]
   }
 ]

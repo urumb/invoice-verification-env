@@ -39,3 +39,4 @@ class StepResult(BaseModel):
 
 class ResetRequest(BaseModel):
     difficulty: Optional[Difficulty] = None
+    seed: Optional[int] = None

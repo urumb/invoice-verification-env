@@ -23,7 +23,7 @@ def root() -> dict[str, str]:
 def reset_environment(request: ResetRequest | None = Body(default=None)) -> Observation:
     payload = request or ResetRequest()
     try:
-        return environment.reset(payload.difficulty)
+        return environment.reset(payload.difficulty, seed=payload.seed)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

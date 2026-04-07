@@ -108,5 +108,49 @@
     },
     "decision": "reject",
     "keywords": ["personal groceries", "household expense", "not business related", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 10000.0,
+      "category": "electronics",
+      "date": "2024-01-22",
+      "description": "High-end server rack for home lab personal project",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["excessive amount", "over policy cap", "personal project", "amount exceeds limit"]
+  },
+  {
+    "invoice": {
+      "amount": 75.0,
+      "category": "office_supplies",
+      "date": "2024-01-23",
+      "description": "Desk organizer and sticky notes for shared workspace",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["no receipt", "missing documentation", "receipt required", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 250.0,
+      "category": "gambling",
+      "date": "2024-01-24",
+      "description": "Team poker night buy-in for morale event",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["invalid category", "gambling", "not allowed category", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 180.0,
+      "category": "travel",
+      "date": "2028-06-15",
+      "description": "Advance booking for future client visit travel",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["future date", "invalid date", "not yet incurred", "date violation"]
   }
 ]

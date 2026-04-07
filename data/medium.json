@@ -108,5 +108,49 @@
     },
     "decision": "approve",
     "keywords": ["small amount", "office supplies", "de minimis", "no receipt required"]
+  },
+  {
+    "invoice": {
+      "amount": 7500.0,
+      "category": "training",
+      "date": "2024-02-12",
+      "description": "Executive coaching retreat at luxury resort",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["excessive amount", "over policy cap", "luxury", "amount exceeds limit"]
+  },
+  {
+    "invoice": {
+      "amount": 320.0,
+      "category": "travel",
+      "date": "2024-02-13",
+      "description": "Taxi fare to airport with no receipt or documentation",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["no receipt", "missing documentation", "receipt required", "undocumented"]
+  },
+  {
+    "invoice": {
+      "amount": 450.0,
+      "category": "donations",
+      "date": "2024-02-14",
+      "description": "Charitable donation to local school on behalf of the company",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["invalid category", "donations not allowed", "not an expense category", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 200.0,
+      "category": "software",
+      "date": "2027-12-01",
+      "description": "Pre-purchase of design tool license for next fiscal year",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["future date", "invalid date", "not yet incurred", "date violation"]
   }
 ]

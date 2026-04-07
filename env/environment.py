@@ -20,7 +20,16 @@ class InvoiceEnvironment:
         self._episode_done = False
         self._rng = random.Random(seed)
 
-    def reset(self, difficulty: Optional[Difficulty] = None) -> Observation:
+    def reset(self, difficulty: Optional[Difficulty] = None, seed: Optional[int] = None) -> Observation:
+        """Reset the environment for a new episode.
+
+        Args:
+            difficulty: Task difficulty level. If None, chosen randomly.
+            seed: If provided, re-seeds the internal RNG for deterministic runs.
+        """
+        if seed is not None:
+            self._rng = random.Random(seed)
+
         chosen_difficulty = difficulty or cast(
             Difficulty, self._rng.choice(["easy", "medium", "hard"])
         )
