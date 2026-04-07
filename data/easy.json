@@ -1,0 +1,112 @@
+[
+  {
+    "invoice": {
+      "amount": 145.5,
+      "category": "office_supplies",
+      "date": "2024-01-10",
+      "description": "Printer paper and pens for the operations team",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["office supplies", "receipt", "business purpose", "allowed category"]
+  },
+  {
+    "invoice": {
+      "amount": 420.0,
+      "category": "personal",
+      "date": "2024-01-11",
+      "description": "Personal spa package for employee relaxation",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["personal expense", "no receipt", "not business related", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 299.99,
+      "category": "software",
+      "date": "2024-01-12",
+      "description": "Annual project management software subscription for team use",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["software", "business tool", "receipt", "approved expense"]
+  },
+  {
+    "invoice": {
+      "amount": 1180.0,
+      "category": "meals",
+      "date": "2024-01-13",
+      "description": "Birthday dinner with friends after work",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["personal expense", "birthday", "no business purpose", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 455.0,
+      "category": "travel",
+      "date": "2024-01-15",
+      "description": "Flight to client site for kickoff meeting",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["business travel", "client meeting", "receipt", "valid purpose"]
+  },
+  {
+    "invoice": {
+      "amount": 89.99,
+      "category": "office_supplies",
+      "date": "2024-01-16",
+      "description": "Gaming keyboard for employee home setup",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["personal use", "gaming", "not office purpose", "unauthorized"]
+  },
+  {
+    "invoice": {
+      "amount": 320.0,
+      "category": "accommodation",
+      "date": "2024-01-18",
+      "description": "Hotel stay for conference attendance",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["conference", "accommodation", "business travel", "receipt"]
+  },
+  {
+    "invoice": {
+      "amount": 210.0,
+      "category": "entertainment",
+      "date": "2024-01-19",
+      "description": "Arcade tokens and games for personal weekend fun",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["personal entertainment", "no receipt", "not business", "unauthorized expense"]
+  },
+  {
+    "invoice": {
+      "amount": 199.0,
+      "category": "training",
+      "date": "2024-01-20",
+      "description": "Online Python course for professional development",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["training", "professional development", "receipt", "approved category"]
+  },
+  {
+    "invoice": {
+      "amount": 350.0,
+      "category": "groceries",
+      "date": "2024-01-21",
+      "description": "Weekly household groceries for personal use",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["personal groceries", "household expense", "not business related", "policy violation"]
+  }
+]

@@ -1,0 +1,112 @@
+[
+  {
+    "invoice": {
+      "amount": 3500.0,
+      "category": "travel",
+      "date": "2024-03-01",
+      "description": "First-class international flight for a one-day client meeting",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["first class", "excessive", "economy required", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 1200.0,
+      "category": "training",
+      "date": "2024-03-02",
+      "description": "Conference sponsorship for an event where the company is speaking",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["conference speaking", "brand visibility", "marketing expense", "valid business purpose"]
+  },
+  {
+    "invoice": {
+      "amount": 50.0,
+      "category": "miscellaneous",
+      "date": "2024-03-05",
+      "description": "Miscellaneous office supplies from an unknown vendor with no documentation",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["unknown vendor", "fraud risk", "missing details", "no receipt"]
+  },
+  {
+    "invoice": {
+      "amount": 2000.0,
+      "category": "rent",
+      "date": "2024-03-10",
+      "description": "Three-day co-working rental for a remote team meetup",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["remote team", "coworking", "approved rental", "business gathering"]
+  },
+  {
+    "invoice": {
+      "amount": 2500.0,
+      "category": "gifts",
+      "date": "2024-03-12",
+      "description": "Luxury handbag purchased as a gift for a client",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["luxury gift", "bribery risk", "excessive value", "compliance issue"]
+  },
+  {
+    "invoice": {
+      "amount": 4900.0,
+      "category": "training",
+      "date": "2024-03-15",
+      "description": "Annual enterprise learning subscription for engineering staff",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["enterprise subscription", "bulk training", "professional development", "valid invoice"]
+  },
+  {
+    "invoice": {
+      "amount": 400.0,
+      "category": "meals",
+      "date": "2024-03-18",
+      "description": "Recruiting dinner with heavy alcohol spend",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["excessive alcohol", "policy violation", "unprofessional expense", "recruiting dinner"]
+  },
+  {
+    "invoice": {
+      "amount": 350.0,
+      "category": "legal",
+      "date": "2024-03-20",
+      "description": "Legal filing fees for incorporation of a new subsidiary",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["legal fees", "incorporation", "approved corporate expense", "business purpose"]
+  },
+  {
+    "invoice": {
+      "amount": 150.0,
+      "category": "transportation",
+      "date": "2024-03-22",
+      "description": "Multi-day conference rideshare submitted as one lump sum without itemization",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["not itemized", "missing receipts", "requires breakdown", "audit failure"]
+  },
+  {
+    "invoice": {
+      "amount": 80.0,
+      "category": "office_supplies",
+      "date": "2024-03-25",
+      "description": "Tools and lumber for an approved remote-work desk stipend",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["home office stipend", "remote work", "approved policy exception", "business support"]
+  }
+]

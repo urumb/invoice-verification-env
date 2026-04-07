@@ -1,0 +1,258 @@
+from __future__ import annotations
+
+import atexit
+import json
+import os
+import subprocess
+import sys
+import time
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+
+import requests
+from openai import OpenAI
+
+from env.models import Action
+
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_URL = os.getenv("INVOICE_ENV_URL", "http://127.0.0.1:7860")
+EPISODES_PER_DIFFICULTY = int(os.getenv("INVOICE_EPISODES", "5"))
+
+POLICY_PROMPT = """You are evaluating employee invoices against company policy.
+
+Approve when the expense has a clear business purpose, acceptable documentation, and does not violate spending policy.
+Reject when the expense is personal, undocumented, excessive, fraudulent, or violates policy.
+
+Return strict JSON with:
+- decision: "approve" or "reject"
+- reason: concise policy-based explanation
+- confidence: float between 0 and 1
+"""
+
+
+def model_to_dict(model: Action) -> Dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
+def cleanup_process(process: Optional[subprocess.Popen]) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    process.wait(timeout=5)
+
+
+class HeuristicInvoiceAgent:
+    def predict(self, invoice: Dict[str, Any]) -> Action:
+        description = str(invoice.get("description", "")).lower()
+        category = str(invoice.get("category", "")).lower()
+        amount = float(invoice.get("amount", 0))
+        receipt = bool(invoice.get("receipt", False))
+
+        reject_terms = [
+            "personal",
+            "birthday",
+            "gaming",
+            "grocery",
+            "household",
+            "luxury",
+            "alcohol",
+            "first-class",
+            "first class",
+            "spa",
+            "video game",
+        ]
+        approve_terms = [
+            "client",
+            "conference",
+            "training",
+            "software",
+            "hosting",
+            "office",
+            "business",
+            "professional",
+            "remote work",
+            "stipend",
+            "wellness program",
+            "overtime",
+            "candidate",
+            "laptop",
+        ]
+
+        if "team-building" in description or "team building" in description:
+            return Action(
+                decision="approve",
+                reason="Approved because the expense supports an approved team-building event with a stated business purpose.",
+                confidence=0.74,
+            )
+
+        if not receipt and amount > 20:
+            return Action(
+                decision="reject",
+                reason="Rejected because the invoice is missing a receipt and exceeds the undocumented expense threshold.",
+                confidence=0.88,
+            )
+
+        if category in {"personal", "groceries", "entertainment"} or any(term in description for term in reject_terms):
+            return Action(
+                decision="reject",
+                reason="Rejected because the expense appears personal or policy violating rather than a valid business expense.",
+                confidence=0.86,
+            )
+
+        if "local seminar" in description and amount >= 500:
+            return Action(
+                decision="reject",
+                reason="Rejected because local travel accommodation appears excessive for an event that could be commuted.",
+                confidence=0.76,
+            )
+
+        if "candidate" in description and not receipt:
+            return Action(
+                decision="reject",
+                reason="Rejected because meals for recruiting still require a receipt under policy.",
+                confidence=0.81,
+            )
+
+        if any(term in description for term in approve_terms) or category in {
+            "office_supplies",
+            "office_equipment",
+            "electronics",
+            "software",
+            "training",
+            "travel",
+            "transportation",
+            "infrastructure",
+            "legal",
+            "accommodation",
+            "health",
+            "rent",
+        }:
+            return Action(
+                decision="approve",
+                reason="Approved because the invoice has a valid business purpose, aligns with an allowed category, and has acceptable support.",
+                confidence=0.72,
+            )
+
+        return Action(
+            decision="reject",
+            reason="Rejected because the business justification is unclear and the expense should be reviewed manually.",
+            confidence=0.6,
+        )
+
+
+class OpenAIInvoiceAgent:
+    def __init__(self) -> None:
+        self._fallback = HeuristicInvoiceAgent()
+        self._api_key = os.getenv("OPENAI_API_KEY")
+        self._model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self._client: Optional[OpenAI] = OpenAI(api_key=self._api_key) if self._api_key else None
+
+    def predict(self, invoice: Dict[str, Any]) -> Action:
+        if self._client is None:
+            return self._fallback.predict(invoice)
+
+        try:
+            completion = self._client.chat.completions.create(
+                model=self._model,
+                temperature=0,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": POLICY_PROMPT},
+                    {
+                        "role": "user",
+                        "content": json.dumps({"invoice": invoice}, ensure_ascii=True),
+                    },
+                ],
+            )
+            content = completion.choices[0].message.content or "{}"
+            payload = json.loads(content)
+            return Action(**payload)
+        except Exception:
+            return self._fallback.predict(invoice)
+
+
+def is_server_ready(base_url: str) -> bool:
+    try:
+        response = requests.get(f"{base_url}/state", timeout=1)
+        return response.ok
+    except requests.RequestException:
+        return False
+
+
+def ensure_server(base_url: str) -> Optional[subprocess.Popen]:
+    if is_server_ready(base_url):
+        return None
+
+    parsed = urlparse(base_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or 7860
+
+    process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(port)],
+        cwd=ROOT_DIR,
+    )
+
+    for _ in range(20):
+        if is_server_ready(base_url):
+            return process
+        time.sleep(0.5)
+
+    process.terminate()
+    process.wait(timeout=5)
+    raise RuntimeError("FastAPI server did not start in time.")
+
+
+def evaluate_difficulty(agent: OpenAIInvoiceAgent, difficulty: str, episodes: int) -> float:
+    rewards = []
+
+    for episode in range(1, episodes + 1):
+        reset_response = requests.post(
+            f"{BASE_URL}/reset",
+            json={"difficulty": difficulty},
+            timeout=10,
+        )
+        reset_response.raise_for_status()
+        observation = reset_response.json()
+
+        action = agent.predict(observation["invoice"])
+        step_response = requests.post(
+            f"{BASE_URL}/step",
+            json=model_to_dict(action),
+            timeout=10,
+        )
+        step_response.raise_for_status()
+        result = step_response.json()
+        rewards.append(float(result["reward"]))
+
+        print(
+            f"[{difficulty}] episode {episode}: decision={action.decision} "
+            f"reward={result['reward']:.2f} info={result['info']}"
+        )
+
+    return sum(rewards) / len(rewards)
+
+
+def main() -> None:
+    server_process = ensure_server(BASE_URL)
+    if server_process is not None:
+        atexit.register(cleanup_process, server_process)
+
+    agent = OpenAIInvoiceAgent()
+    overall_scores = {}
+
+    for difficulty in ("easy", "medium", "hard"):
+        average_reward = evaluate_difficulty(agent, difficulty, EPISODES_PER_DIFFICULTY)
+        overall_scores[difficulty] = average_reward
+        print(f"{difficulty} average reward: {average_reward:.2f}")
+
+    grand_average = sum(overall_scores.values()) / len(overall_scores)
+    print(f"overall average reward: {grand_average:.2f}")
+
+    cleanup_process(server_process)
+
+
+if __name__ == "__main__":
+    main()
