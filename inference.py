@@ -391,7 +391,9 @@ def evaluate_difficulty(
             timeout=10,
         )
         reset_resp.raise_for_status()
-        observation = reset_resp.json()
+        reset_data = reset_resp.json()
+        session_id = reset_data.get("session_id")
+        observation = reset_data.get("observation", reset_data)
 
         # ── Predict ──
         action = agent.predict(observation["invoice"])
@@ -399,6 +401,7 @@ def evaluate_difficulty(
         # ── Step ──
         step_resp = requests.post(
             f"{base_url}/step",
+            params={"session_id": session_id} if session_id is not None else None,
             json=model_to_dict(action),
             timeout=10,
         )

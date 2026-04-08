@@ -2,8 +2,8 @@
 
 Scores an agent's ``Action`` against the ground-truth ``TaskRecord`` using:
     - Decision correctness  (0.6 base)
-    - Keyword matching       (0.3 scaled proportionally)
-    - Field-reference bonus  (+0.1 per referenced invoice field, capped at 1.0)
+    - Keyword matching       (capped)
+    - Field-reference bonus  (capped)
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import re
 from typing import Any, Dict, Iterable, List, Set
 
 from .models import Action, TaskRecord
-from .policy import REFERENCE_FIELDS
+from .policy import REFERENCE_FIELDS, evaluate_invoice
 
 
 # ---------------------------------------------------------------------------
@@ -66,26 +66,34 @@ def grade(action: Action, ground_truth: TaskRecord) -> float:
     """Compute a reward ∈ [0, 1] for the agent's action.
 
     Breakdown:
-        - 0.6  correct decision
-        - 0.3  keyword coverage (proportional)
-        - +0.1 per referenced invoice field (receipt, amount, category, date)
+        - 0.6  correct decision (computed dynamically from policy)
+        - Explanation bonus (keywords+refs) capped at 0.4
         - −0.1 penalty if reason is vague
         - Capped to [0.0, 1.0]
     """
+    # ── Policy dynamically overrides dataset label ──
+    policy_result = evaluate_invoice(ground_truth.invoice)
+    true_decision = policy_result["decision"]
+    true_keywords = policy_result.get("violations") or ["amount", "category", "receipt", "date"]
+
     score = 0.0
 
     # ── Decision correctness ──
-    if action.decision == ground_truth.decision:
+    if action.decision == true_decision:
         score += 0.6
 
-    # ── Keyword coverage ──
-    matches = matched_keywords(action.reason, ground_truth.keywords)
-    if ground_truth.keywords:
-        score += 0.3 * (len(matches) / len(ground_truth.keywords))
+    # ── Explanation Bonus ──
+    matches = matched_keywords(action.reason, true_keywords)
+    keyword_score = 0.0
+    if true_keywords:
+        keyword_score = 0.3 * (len(matches) / len(true_keywords))
 
-    # ── Field-reference bonus ──
     refs = referenced_fields(action.reason)
-    score += 0.1 * len(refs)
+    ref_score = 0.1 * len(refs)
+
+    # Game-proof limit: max 0.4 from explanations
+    explanation_score = min(0.4, keyword_score + ref_score)
+    score += explanation_score
 
     # ── Vagueness penalty ──
     if _is_vague(action.reason):
@@ -103,26 +111,20 @@ def build_feedback(
     ground_truth: TaskRecord,
     reward: float,
 ) -> Dict[str, Any]:
-    """Build a structured feedback dictionary for the step result ``info``.
+    """Build a structured feedback dictionary for the step result ``info``."""
+    policy_result = evaluate_invoice(ground_truth.invoice)
+    true_decision = policy_result["decision"]
+    true_keywords = policy_result.get("violations") or ["amount", "category", "receipt", "date"]
 
-    Keys returned:
-        - ``decision_correct`` (bool)
-        - ``matched_keywords`` (list[str])
-        - ``referenced_fields`` (list[str])
-        - ``is_vague`` (bool)
-        - ``reward`` (float)
-        - ``message`` (str)
-    """
-    decision_correct = action.decision == ground_truth.decision
-    keyword_hits = matched_keywords(action.reason, ground_truth.keywords)
+    decision_correct = action.decision == true_decision
+    keyword_hits = matched_keywords(action.reason, true_keywords)
     refs = sorted(referenced_fields(action.reason))
     vague = _is_vague(action.reason)
 
-    # Build human-readable message
     if decision_correct:
         message = "Correct decision."
     else:
-        message = f"Incorrect decision. Expected '{ground_truth.decision}'."
+        message = f"Incorrect decision. Expected '{true_decision}'."
 
     if keyword_hits:
         message += f" Reason matched policy keywords: {', '.join(keyword_hits)}."

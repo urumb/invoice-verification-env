@@ -9,7 +9,8 @@
     "confidence": [
       0,
       1
-    ]
+    ],
+    "reason": "string"
   },
   "observation_space": {
     "fields": [

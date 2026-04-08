@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 from fastapi import Body, FastAPI, HTTPException
 
@@ -14,7 +15,27 @@ app = FastAPI(
     description="OpenEnv-compatible invoice verification environment.",
     version="1.0.0",
 )
-environment = InvoiceEnvironment()
+
+_environments: dict[str, InvoiceEnvironment] = {}
+
+def _get_env(session_id: str | None) -> tuple[InvoiceEnvironment, str]:
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    if session_id not in _environments:
+        _environments[session_id] = InvoiceEnvironment()
+    return _environments[session_id], session_id
+
+
+class SessionObservation(Observation):
+    session_id: str
+
+
+class SessionStepResult(StepResult):
+    session_id: str
+
+
+class SessionState(State):
+    session_id: str
 
 
 @app.get("/")
@@ -31,23 +52,57 @@ def get_metadata() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.post("/reset", response_model=Observation)
-def reset_environment(request: ResetRequest | None = Body(default=None)) -> Observation:
+@app.post("/reset", response_model=SessionObservation)
+def reset_environment(
+    session_id: str | None = None,
+    request: ResetRequest | None = Body(default=None)
+) -> SessionObservation:
+    env, sid = _get_env(session_id)
     payload = request or ResetRequest()
+    
+    if payload.seed is not None:
+        import random
+        random.seed(payload.seed)
+        try:
+            import numpy as np
+            np.random.seed(payload.seed)
+        except ImportError:
+            pass
+        if hasattr(env, "_rng"):
+            env._rng = random.Random(payload.seed)
+
     try:
-        return environment.reset(payload.difficulty, seed=payload.seed)
+        obs = env.reset(payload.difficulty, seed=payload.seed)
+        return SessionObservation(invoice=obs.invoice, session_id=sid)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/step", response_model=StepResult)
-def step_environment(action: Action) -> StepResult:
+@app.post("/step", response_model=SessionStepResult)
+def step_environment(
+    action: Action,
+    session_id: str | None = None
+) -> SessionStepResult:
+    env, sid = _get_env(session_id)
     try:
-        return environment.step(action)
+        result = env.step(action)
+        return SessionStepResult(
+            observation=result.observation,
+            reward=result.reward,
+            done=result.done,
+            info=result.info,
+            session_id=sid
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/state", response_model=State)
-def get_state() -> State:
-    return environment.state()
+@app.get("/state", response_model=SessionState)
+def get_state(session_id: str | None = None) -> SessionState:
+    env, sid = _get_env(session_id)
+    st = env.state()
+    return SessionState(
+        step_count=st.step_count,
+        current_invoice=st.current_invoice,
+        session_id=sid
+    )

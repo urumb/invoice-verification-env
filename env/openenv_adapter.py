@@ -25,7 +25,10 @@ def register_environment(name: str, env_cls: type) -> None:
 class OpenEnvAdapter(Environment):
     def __init__(self, seed: Optional[int] = None) -> None:
         super().__init__()
+        self._seed = seed
         self._env = InvoiceEnvironment(seed=seed)
+        if seed is not None:
+             self.seed(seed)
 
     def reset(
         self,
@@ -34,6 +37,11 @@ class OpenEnvAdapter(Environment):
         difficulty: Optional[Difficulty] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
+        if seed is not None:
+            self.seed(seed)
+        elif self._seed is not None:
+            seed = self._seed
+
         result = self._env.reset(difficulty=difficulty, seed=seed)
         return {"invoice": result.invoice}
 
@@ -91,19 +99,20 @@ class OpenEnvAdapter(Environment):
         except (json.JSONDecodeError, OSError):
             return default_metadata
 
+    @property
     def state(self) -> Dict[str, Any]:
         st = self._env.state()
-        return {
+        import json
+        return json.loads(json.dumps({
             "step_count": st.step_count,
             "current_invoice": st.current_invoice,
-        }
+        }, default=str))
 
     def seed(self, seed: int) -> None:
+        self._seed = seed
         random.seed(seed)
         if np is not None:
             np.random.seed(seed)
-        if hasattr(self._env, "seed"):
-            self._env.seed(seed)
 
     def close(self) -> None:
         pass

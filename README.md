@@ -10,7 +10,7 @@ This isn't a standard classification pipeline—it's a full-fledged Mini RL Envi
 - **Reasoning-Aware Rewards**: Agents are explicitly rewarded for matching key reasoning traits, preventing "right answer, wrong reason" scenarios.
 - **Deploy Anywhere**: Built totally API-first, making it instantly deployable locally, on OpenEnv, or Hugging Face.
 
-## ⚙️ Architecture
+## ⚙️ Architecture`
 - **InvoiceEnvironment (Core)**: The underlying state machine managing episodes, invoice selection, grading, and dynamic feedback.
 - **OpenEnvAdapter**: A standard wrapper that adheres to the OpenEnv specification, ensuring easy plug-and-play with external evaluation frameworks.
 - **FastAPI Backend**: Exposes the environment natively over HTTP to support remote agent inference.

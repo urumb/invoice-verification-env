@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import uuid
 from typing import Any, Dict
 
 import gradio as gr
@@ -19,21 +20,32 @@ from env.policy import evaluate_invoice
 from inference import RuleBasedAgent
 
 
-_adapter = OpenEnvAdapter()
+_adapters: Dict[str, OpenEnvAdapter] = {}
+
+
+def _get_adapter(session_id: str | None) -> tuple[OpenEnvAdapter, str]:
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        
+    if session_id not in _adapters:
+        _adapters[session_id] = OpenEnvAdapter()
+    return _adapters[session_id], session_id
+
+
 app = FastAPI(title="Invoice Verification HF Space", version="1.0.0")
 
 
-def _prepare_custom_episode(invoice: Dict[str, Any]) -> None:
+def _prepare_custom_episode(adapter: OpenEnvAdapter, invoice: Dict[str, Any]) -> None:
     policy_result = evaluate_invoice(invoice)
     keywords = policy_result.get("violations") or ["amount", "category", "receipt", "date"]
 
-    _adapter._env._current_task = TaskRecord(
+    adapter._env._current_task = TaskRecord(
         invoice=invoice,
         decision=policy_result["decision"],
         keywords=keywords,
     )
-    _adapter._env._step_count = 0
-    _adapter._env._episode_done = False
+    adapter._env._step_count = 0
+    adapter._env._episode_done = False
 
 
 @app.get("/")
@@ -43,26 +55,35 @@ def read_root() -> Dict[str, str]:
 
 @app.get("/metadata")
 def metadata() -> Dict[str, Any]:
-    return _adapter.get_metadata()
+    return OpenEnvAdapter().get_metadata()
 
 
 @app.post("/reset")
-def api_reset() -> Dict[str, Any]:
+def api_reset(session_id: str | None = None, seed: int | None = None) -> Dict[str, Any]:
+    adapter, sid = _get_adapter(session_id)
+    
+    if seed is not None:
+        adapter.seed(seed)
+
     try:
-        return _adapter.reset()
+        result = adapter.reset(seed=seed)
+        result["session_id"] = sid
+        return result
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Reset failed: {exc}") from exc
 
 
 @app.post("/step")
-def api_step(action: Action) -> Dict[str, Any]:
+def api_step(action: Action, session_id: str | None = None) -> Dict[str, Any]:
+    adapter, sid = _get_adapter(session_id)
     try:
-        observation, reward, done, info = _adapter.step(action)
+        observation, reward, done, info = adapter.step(action)
         return {
             "observation": observation,
             "reward": reward,
             "done": done,
             "info": info,
+            "session_id": sid,
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -79,8 +100,11 @@ def gradio_interface(invoice_json_str: str) -> tuple[str, str, str]:
         agent = RuleBasedAgent()
         action = agent.predict(invoice)
 
-        _prepare_custom_episode(invoice)
-        _, reward, done, info = _adapter.step(action)
+        session_id = str(uuid.uuid4())
+        adapter, _ = _get_adapter(session_id)
+        
+        _prepare_custom_episode(adapter, invoice)
+        _, reward, done, info = adapter.step(action)
 
         message = info.get("message", "No explanation available.")
         return (
