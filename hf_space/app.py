@@ -1,4 +1,4 @@
-"""FastAPI and Gradio application wrapper for Hugging Face Spaces."""
+﻿"""FastAPI and Gradio application wrapper for Hugging Face Spaces."""
 from __future__ import annotations
 
 import json
@@ -26,7 +26,6 @@ _adapters: Dict[str, OpenEnvAdapter] = {}
 def _get_adapter(session_id: str | None) -> tuple[OpenEnvAdapter, str]:
     if not session_id:
         session_id = str(uuid.uuid4())
-        
     if session_id not in _adapters:
         _adapters[session_id] = OpenEnvAdapter()
     return _adapters[session_id], session_id
@@ -37,12 +36,10 @@ app = FastAPI(title="Invoice Verification HF Space", version="1.0.0")
 
 def _prepare_custom_episode(adapter: OpenEnvAdapter, invoice: Dict[str, Any]) -> None:
     policy_result = evaluate_invoice(invoice)
-    keywords = policy_result.get("violations") or ["amount", "category", "receipt", "date"]
-
     adapter._env._current_task = TaskRecord(
         invoice=invoice,
         decision=policy_result["decision"],
-        keywords=keywords,
+        keywords=policy_result.get("violations") or [],
     )
     adapter._env._step_count = 0
     adapter._env._episode_done = False
@@ -61,7 +58,6 @@ def metadata() -> Dict[str, Any]:
 @app.post("/reset")
 def api_reset(session_id: str | None = None, seed: int | None = None) -> Dict[str, Any]:
     adapter, sid = _get_adapter(session_id)
-    
     if seed is not None:
         adapter.seed(seed)
 
@@ -91,6 +87,14 @@ def api_step(action: Action, session_id: str | None = None) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Step failed: {exc}") from exc
 
 
+@app.get("/state")
+def api_state(session_id: str | None = None) -> Dict[str, Any]:
+    adapter, sid = _get_adapter(session_id)
+    state = dict(adapter.state)
+    state["session_id"] = sid
+    return state
+
+
 def gradio_interface(invoice_json_str: str) -> tuple[str, str, str]:
     try:
         invoice = json.loads(invoice_json_str)
@@ -102,7 +106,6 @@ def gradio_interface(invoice_json_str: str) -> tuple[str, str, str]:
 
         session_id = str(uuid.uuid4())
         adapter, _ = _get_adapter(session_id)
-        
         _prepare_custom_episode(adapter, invoice)
         _, reward, done, info = adapter.step(action)
 
