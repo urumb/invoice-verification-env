@@ -1,0 +1,18 @@
+[project]
+name = "invoice-verification-env"
+version = "0.1.0"
+description = "OpenEnv-compatible RL environment for invoice verification"
+authors = [
+{ name = "Invoice Verification Team" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+"fastapi",
+"uvicorn",
+"pydantic",
+"requests",
+"gradio",
+"openenv-core"
+]

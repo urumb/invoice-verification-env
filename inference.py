@@ -10,14 +10,19 @@ Usage::
     python inference.py                    # defaults: seed=42, 5 episodes
     python inference.py --seed 123
     python inference.py --episodes 10
-    python inference.py --agent openai
+    python inference.py --use-llm
 """
 from __future__ import annotations
+
+import os
+
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 import argparse
 import atexit
 import json
-import os
 import random
 import subprocess
 import sys
@@ -27,11 +32,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests
-
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+from openai import OpenAI
 
 from env.models import Action
 from env.policy import evaluate_invoice
@@ -41,7 +42,7 @@ from env.policy import evaluate_invoice
 # ---------------------------------------------------------------------------
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_URL = os.getenv("INVOICE_ENV_URL", "http://127.0.0.1:8000")
+BASE_URL = API_BASE_URL
 DOCKER_BASE_URL = "http://127.0.0.1:7860"
 
 POLICY_PROMPT = """\
@@ -255,10 +256,10 @@ class OpenAIInvoiceAgent:
 
     def __init__(self) -> None:
         self._fallback = RuleBasedAgent()
-        self._api_key = os.getenv("OPENAI_API_KEY")
-        self._model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self._api_key = os.getenv("OPENAI_API_KEY") or HF_TOKEN
+        self._model = MODEL_NAME
         self._client: Optional[OpenAI] = (
-            OpenAI(api_key=self._api_key) if self._api_key and OpenAI else None
+            OpenAI(api_key=self._api_key) if self._api_key else None
         )
 
     def predict(self, invoice: Dict[str, Any]) -> Action:
@@ -267,19 +268,19 @@ class OpenAIInvoiceAgent:
             return self._fallback.predict(invoice)
 
         try:
-            completion = self._client.chat.completions.create(
-                model=self._model,
-                temperature=0,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": POLICY_PROMPT},
-                    {
-                        "role": "user",
-                        "content": json.dumps({"invoice": invoice}, ensure_ascii=True),
-                    },
-                ],
+            prompt = (
+                f"{POLICY_PROMPT}\n\n"
+                f"Invoice JSON:\n{json.dumps({'invoice': invoice}, ensure_ascii=True)}"
             )
-            content = completion.choices[0].message.content or "{}"
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": "You are an invoice verification agent."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0,
+            )
+            content = response.choices[0].message.content or "{}"
             payload = _safe_parse_json(content)
             if payload is None:
                 print("  [!] LLM returned unparseable JSON, falling back to rule-based.")
@@ -305,7 +306,7 @@ def is_server_ready(base_url: str) -> bool:
 
 def resolve_base_url(base_url: str) -> str:
     """Auto-detect whether to use the local or Docker server."""
-    if os.getenv("INVOICE_ENV_URL"):
+    if os.getenv("API_BASE_URL"):
         return base_url
     if is_server_ready(base_url):
         return base_url
@@ -368,7 +369,6 @@ def create_agent(agent_type: str) -> RuleBasedAgent | HeuristicInvoiceAgent | Op
 
 def evaluate_difficulty(
     agent: RuleBasedAgent | HeuristicInvoiceAgent | OpenAIInvoiceAgent,
-    base_url: str,
     difficulty: str,
     episodes: int,
     metrics: RunMetrics,
@@ -386,7 +386,7 @@ def evaluate_difficulty(
             payload["seed"] = metrics._seed
             
         reset_resp = requests.post(
-            f"{base_url}/reset",
+            f"{API_BASE_URL}/reset",
             json=payload,
             timeout=10,
         )
@@ -400,7 +400,7 @@ def evaluate_difficulty(
 
         # ── Step ──
         step_resp = requests.post(
-            f"{base_url}/step",
+            f"{API_BASE_URL}/step",
             params={"session_id": session_id} if session_id is not None else None,
             json=model_to_dict(action),
             timeout=10,
@@ -504,8 +504,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt-4o-mini",
-        help="LLM model string to use if --use-llm is provided (default: gpt-4o-mini)",
+        default=MODEL_NAME,
+        help=f"LLM model string to use if --use-llm is provided (default: {MODEL_NAME})",
     )
     return parser.parse_args()
 
@@ -513,12 +513,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: parse args, seed RNG, run evaluation, print metrics."""
     args = parse_args()
+    global API_BASE_URL
 
     # Deterministic seeding
     random.seed(args.seed)
 
-    base_url = resolve_base_url(BASE_URL)
-    server_process = ensure_server(base_url, seed=args.seed)
+    API_BASE_URL = resolve_base_url(API_BASE_URL)
+    server_process = ensure_server(API_BASE_URL, seed=args.seed)
     if server_process is not None:
         atexit.register(cleanup_process, server_process)
 
@@ -547,7 +548,7 @@ def main() -> None:
 
     for difficulty in ("easy", "medium", "hard"):
         print(f"\n-- {difficulty.upper()} ({args.episodes} episodes) --")
-        avg = evaluate_difficulty(agent, base_url, difficulty, args.episodes, metrics)
+        avg = evaluate_difficulty(agent, difficulty, args.episodes, metrics)
         difficulty_scores[difficulty] = avg
         print(f"  -> {difficulty} average reward: {avg:.4f}")
 
