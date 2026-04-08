@@ -1,4 +1,4 @@
-﻿"""Grading logic for the invoice verification environment."""
+"""Grading logic for the invoice verification environment."""
 from __future__ import annotations
 
 import re
@@ -8,118 +8,168 @@ from .models import Action, TaskRecord
 from .policy import REFERENCE_FIELDS, evaluate_invoice
 
 
-GENERIC_FIELD_TOKENS = {"amount", "category", "receipt", "date"}
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "because",
+    "by",
+    "for",
+    "from",
+    "in",
+    "invoice",
+    "is",
+    "of",
+    "on",
+    "policy",
+    "that",
+    "the",
+    "this",
+    "to",
+    "with",
+    "amount",
+    "category",
+    "date",
+    "receipt",
+}
 
 
 def _tokenize(text: str) -> List[str]:
-    """Split *text* into lowercase alphanumeric tokens."""
     return TOKEN_PATTERN.findall((text or "").lower())
 
 
 def _normalize_phrase(text: str) -> str:
-    """Collapse *text* into a normalized space-delimited token string."""
     return " ".join(_tokenize(text))
 
 
-def _extract_expected_keywords(violations: Iterable[str]) -> List[str]:
-    """Convert policy violations into de-duplicated explanation keywords."""
-    expected: List[str] = []
+def _meaningful_tokens(text: str) -> List[str]:
+    return [
+        token
+        for token in _tokenize(text)
+        if token not in STOPWORDS and len(token) > 1
+    ]
+
+
+def _dedupe_preserve_order(values: Iterable[str]) -> List[str]:
+    result: List[str] = []
     seen: Set[str] = set()
-
-    for violation in violations:
-        keyword = _normalize_phrase(str(violation).replace("_", " "))
-        if not keyword:
+    for value in values:
+        normalized = _normalize_phrase(value)
+        if not normalized or normalized in seen:
             continue
-
-        meaningful_tokens = [
-            token
-            for token in _tokenize(keyword)
-            if token not in GENERIC_FIELD_TOKENS and len(token) > 2
-        ]
-        if not meaningful_tokens:
-            continue
-
-        if keyword not in seen:
-            seen.add(keyword)
-            expected.append(keyword)
-
-    return expected
+        seen.add(normalized)
+        result.append(str(value))
+    return result
 
 
-def _matches_keyword(reason: str, keyword: str) -> bool:
-    """Return *True* when *reason* meaningfully matches *keyword*."""
+def _matches_concept(reason: str, concept: str) -> bool:
     normalized_reason = _normalize_phrase(reason)
-    normalized_keyword = _normalize_phrase(keyword)
-    if not normalized_reason or not normalized_keyword:
+    normalized_concept = _normalize_phrase(concept)
+    if not normalized_reason or not normalized_concept:
         return False
 
-    if normalized_keyword in normalized_reason:
+    if normalized_concept in normalized_reason:
         return True
 
-    reason_tokens = set(_tokenize(reason))
-    keyword_tokens = _tokenize(keyword)
-    meaningful_tokens = [
-        token for token in keyword_tokens if token not in GENERIC_FIELD_TOKENS and len(token) > 2
-    ]
-    if not meaningful_tokens:
+    reason_tokens = set(_meaningful_tokens(reason))
+    concept_tokens = _meaningful_tokens(concept)
+    if not concept_tokens:
         return False
 
-    if len(meaningful_tokens) == 1 and len(keyword_tokens) > 1:
-        return all(token in reason_tokens for token in keyword_tokens)
-
-    return all(token in reason_tokens for token in meaningful_tokens)
+    return all(token in reason_tokens for token in concept_tokens)
 
 
 def matched_keywords(reason: str, keywords: Iterable[str]) -> List[str]:
-    """Return the subset of *keywords* that match *reason*."""
-    return [keyword for keyword in keywords if _matches_keyword(reason, keyword)]
+    return [keyword for keyword in keywords if _matches_concept(reason, keyword)]
 
 
 def referenced_fields(reason: str) -> Set[str]:
-    """Return invoice fields cited in *reason*."""
     reason_lower = (reason or "").lower()
     return {field for field in REFERENCE_FIELDS if field in reason_lower}
 
 
 def _is_vague(reason: str) -> bool:
-    """Heuristic flag for very short or content-free reasoning."""
-    tokens = _tokenize(reason)
-    if len(tokens) < 3:
-        return True
-    return len(referenced_fields(reason)) == 0 and len(tokens) < 5
+    meaningful = _meaningful_tokens(reason)
+    return len(meaningful) < 4
 
 
-def _reasoning_bonus(reason: str) -> float:
-    """Award a small bonus for non-empty reasoning without over-rewarding trivial text."""
-    token_count = len(_tokenize(reason))
-    if token_count == 0:
+def _reasoning_targets(ground_truth: TaskRecord, policy_result: Dict[str, Any]) -> List[str]:
+    targets: List[str] = []
+    targets.extend(ground_truth.keywords or [])
+    targets.extend(policy_result.get("expected_reasoning") or [])
+    return _dedupe_preserve_order(targets)
+
+
+def _fact_targets(ground_truth: TaskRecord, policy_result: Dict[str, Any]) -> List[str]:
+    invoice = ground_truth.invoice
+    targets: List[str] = list(policy_result.get("expected_reasoning") or [])
+
+    category = str(invoice.get("category", "")).strip().lower()
+    if category:
+        targets.append(category.replace("_", " "))
+
+    amount_value = invoice.get("amount")
+    try:
+        amount = float(amount_value)
+    except (TypeError, ValueError):
+        amount = None
+    if amount is not None:
+        targets.append(f"${amount:.2f}")
+        targets.append(f"{amount:g}")
+
+    receipt = bool(invoice.get("receipt", False))
+    targets.append("receipt is present" if receipt else "receipt is missing")
+
+    date_str = str(invoice.get("date", "")).strip()
+    if date_str:
+        targets.append(date_str)
+
+    return _dedupe_preserve_order(targets)
+
+
+def _relevance_score(reason: str, targets: List[str]) -> float:
+    if not reason.strip() or not targets:
         return 0.0
-    return min(0.1, round(0.02 * token_count, 4))
+    hits = matched_keywords(reason, targets)
+    return round(0.25 * (len(hits) / len(targets)), 4)
 
 
-def _keyword_score(reason: str, expected_keywords: List[str]) -> float:
-    """Score explanation quality using only meaningful policy keywords."""
-    if not expected_keywords:
+def _specificity_score(reason: str, fact_targets: List[str]) -> float:
+    if not reason.strip() or not fact_targets:
         return 0.0
+    hits = matched_keywords(reason, fact_targets)
+    if not hits:
+        return 0.0
+    denominator = max(1, min(len(fact_targets), 2))
+    return round(0.10 * min(1.0, len(hits) / denominator), 4)
 
-    matches = matched_keywords(reason, expected_keywords)
-    denominator = max(len(expected_keywords), 2)
-    return min(0.3, round(0.3 * (len(matches) / denominator), 4))
+
+def _clarity_score(reason: str) -> float:
+    if _is_vague(reason):
+        return 0.0
+    if len(_tokenize(reason)) < 6:
+        return 0.0
+    return 0.05
 
 
 def grade(action: Action, ground_truth: TaskRecord) -> float:
-    """Compute a reward in ``[0, 1]`` for the agent's action."""
     policy_result = evaluate_invoice(ground_truth.invoice)
     true_decision = policy_result["decision"]
-    expected_keywords = _extract_expected_keywords(policy_result.get("violations") or [])
+    if action.decision != true_decision:
+        return 0.0
 
-    base = 0.6 if action.decision == true_decision else 0.0
-    explanation_score = _keyword_score(action.reason, expected_keywords)
-    reasoning_bonus = _reasoning_bonus(action.reason)
+    targets = _reasoning_targets(ground_truth, policy_result)
+    fact_targets = _fact_targets(ground_truth, policy_result)
 
-    total = base + explanation_score + reasoning_bonus
-    return max(0.0, min(1.0, round(total, 4)))
+    decision_score = 0.55
+    relevance_score = _relevance_score(action.reason, targets)
+    specificity_score = _specificity_score(action.reason, fact_targets)
+    clarity_score = _clarity_score(action.reason)
+
+    total = decision_score + relevance_score + specificity_score + clarity_score
+    return max(0.0, min(0.95, round(total, 4)))
 
 
 def build_feedback(
@@ -127,30 +177,34 @@ def build_feedback(
     ground_truth: TaskRecord,
     reward: float,
 ) -> Dict[str, Any]:
-    """Build a structured feedback dictionary for the step result ``info``."""
     policy_result = evaluate_invoice(ground_truth.invoice)
     true_decision = policy_result["decision"]
-    expected_keywords = _extract_expected_keywords(policy_result.get("violations") or [])
+    reasoning_targets = _reasoning_targets(ground_truth, policy_result)
+    fact_targets = _fact_targets(ground_truth, policy_result)
 
     decision_correct = action.decision == true_decision
-    keyword_hits = matched_keywords(action.reason, expected_keywords)
+    keyword_hits = matched_keywords(action.reason, reasoning_targets)
+    fact_hits = matched_keywords(action.reason, fact_targets)
     refs = sorted(referenced_fields(action.reason))
     vague = _is_vague(action.reason)
-    explanation_score = _keyword_score(action.reason, expected_keywords)
-    reasoning_bonus = _reasoning_bonus(action.reason)
+    relevance_score = _relevance_score(action.reason, reasoning_targets) if decision_correct else 0.0
+    specificity_score = _specificity_score(action.reason, fact_targets) if decision_correct else 0.0
+    clarity_score = _clarity_score(action.reason) if decision_correct else 0.0
 
     if decision_correct:
         message = "Correct decision."
     else:
         message = f"Incorrect decision. Expected '{true_decision}'."
 
-    if expected_keywords:
-        if keyword_hits:
-            message += f" Reason matched policy keywords: {', '.join(keyword_hits)}."
-        else:
-            message += " Reason did not match any expected policy keywords."
+    if keyword_hits:
+        message += f" Reason matched relevant evidence: {', '.join(keyword_hits)}."
     else:
-        message += " No explanation keywords were expected for this approval case."
+        message += " Reason did not match the expected policy evidence."
+
+    if fact_hits:
+        message += f" Invoice-specific facts referenced: {', '.join(fact_hits)}."
+    else:
+        message += " Reason did not reference invoice-specific facts."
 
     if refs:
         message += f" Referenced fields: {', '.join(refs)}."
@@ -161,16 +215,22 @@ def build_feedback(
         message += " Reason is vague."
 
     message += (
-        f" Explanation score={explanation_score:.2f}."
-        f" Reasoning bonus={reasoning_bonus:.2f}."
+        f" Relevance score={relevance_score:.2f}."
+        f" Specificity score={specificity_score:.2f}."
+        f" Clarity score={clarity_score:.2f}."
         f" Reward={reward:.2f}."
     )
 
     return {
         "decision_correct": decision_correct,
+        "expected_decision": true_decision,
         "matched_keywords": keyword_hits,
+        "matched_fact_targets": fact_hits,
         "referenced_fields": refs,
         "is_vague": vague,
+        "relevance_score": relevance_score,
+        "specificity_score": specificity_score,
+        "clarity_score": clarity_score,
         "reward": reward,
         "message": message,
     }

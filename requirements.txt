@@ -1,6 +1,7 @@
 fastapi
-uvicorn
-pydantic
-requests
+gradio
 openai
 openenv-core
+pydantic
+requests
+uvicorn

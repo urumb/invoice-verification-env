@@ -1,24 +1,41 @@
 {
-  "name": "invoice-verification",
-  "description": "RL environment for verifying invoices based on policy rules.",
+  "name": "invoice-verification-env",
+  "description": "OpenEnv-compatible environment for approving or rejecting employee invoices against company policy.",
   "action_space": {
-    "decision": [
-      "approve",
-      "reject"
-    ],
-    "confidence": [
-      0,
-      1
-    ],
-    "reason": "string"
+    "type": "object",
+    "properties": {
+      "decision": {
+        "type": "string",
+        "enum": [
+          "approve",
+          "reject"
+        ]
+      },
+      "reason": {
+        "type": "string",
+        "minLength": 1
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "decision",
+      "reason",
+      "confidence"
+    ]
   },
   "observation_space": {
-    "fields": [
-      "amount",
-      "category",
-      "date",
-      "description",
-      "receipt"
+    "type": "object",
+    "properties": {
+      "invoice": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "invoice"
     ]
   },
   "reward_range": [

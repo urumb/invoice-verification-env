@@ -1,24 +1,12 @@
-"""Centralized company expense policy engine.
-
-All reimbursement rules live here so that both the grading system and
-inference agent can share a single source of truth.  Nothing in this
-module is environment-specific — it is pure business logic.
-"""
+"""Centralized company expense policy engine."""
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Dict, FrozenSet, List, Set
+from typing import Any, Dict, FrozenSet, List, Optional, Set
 
-# ── Policy constants ──────────────────────────────────────────────────────────
 
-MAX_AMOUNT: float = 5000.0
-"""Maximum single-invoice amount (USD) before automatic rejection."""
-
+MAX_AMOUNT: float = 2000.0
 RECEIPT_REQUIRED: bool = True
-"""Whether a receipt is required for expense approval."""
-
-RECEIPT_WAIVER_THRESHOLD: float = 25.0
-"""Amounts at or below this value may be approved without a receipt."""
 
 ALLOWED_CATEGORIES: FrozenSet[str] = frozenset(
     {
@@ -37,7 +25,6 @@ ALLOWED_CATEGORIES: FrozenSet[str] = frozenset(
         "meals",
     }
 )
-"""Categories that are valid for company reimbursement."""
 
 REJECT_DESCRIPTION_TERMS: List[str] = [
     "personal",
@@ -52,129 +39,141 @@ REJECT_DESCRIPTION_TERMS: List[str] = [
     "spa",
     "video game",
 ]
-"""Substrings in an invoice description that signal automatic rejection."""
 
 REFERENCE_FIELDS: List[str] = ["receipt", "amount", "category", "date"]
-"""Invoice fields that a well-formed reason should reference."""
 
 
-# ── Validation helpers ────────────────────────────────────────────────────────
+def normalize_category(category: Any) -> str:
+    return str(category or "").strip().lower()
+
+
+def parse_amount(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_receipt(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
 
 def is_valid_category(category: str) -> bool:
-    """Return *True* if the category is in the allowed set."""
-    return category.lower().strip() in ALLOWED_CATEGORIES
+    return normalize_category(category) in ALLOWED_CATEGORIES
 
 
-def is_valid_amount(amount: float) -> bool:
-    """Return *True* if the amount does not exceed the policy cap."""
-    return 0 < amount <= MAX_AMOUNT
-
-
-def is_receipt_required(amount: float) -> bool:
-    """Return *True* if a receipt is required for this amount."""
-    if not RECEIPT_REQUIRED:
-        return False
-    return amount > RECEIPT_WAIVER_THRESHOLD
+def is_valid_amount(amount: Optional[float]) -> bool:
+    return amount is not None and 0 < amount <= MAX_AMOUNT
 
 
 def is_valid_date(date_str: str) -> bool:
-    """Return *True* if the date is not in the future.
-
-    Accepts ISO-8601 date strings (``YYYY-MM-DD``).  Malformed strings
-    are treated as *invalid*.
-    """
     try:
-        invoice_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        invoice_date = datetime.strptime(str(date_str), "%Y-%m-%d").date()
         return invoice_date <= date.today()
-    except (ValueError, TypeError):
+    except (TypeError, ValueError):
         return False
 
 
 def has_reject_terms(description: str) -> bool:
-    """Return *True* if the description contains policy-violating keywords."""
-    desc_lower = description.lower()
+    desc_lower = str(description or "").lower()
     return any(term in desc_lower for term in REJECT_DESCRIPTION_TERMS)
 
 
 def get_referenced_fields(reason: str) -> Set[str]:
-    """Return the set of standard invoice fields mentioned in *reason*."""
-    reason_lower = reason.lower()
+    reason_lower = str(reason or "").lower()
     return {field for field in REFERENCE_FIELDS if field in reason_lower}
 
 
-def evaluate_invoice(invoice: Dict[str, Any]) -> Dict[str, Any]:
-    """Run all policy checks on an invoice and return a diagnostic dict.
+def _format_amount(amount: Optional[float]) -> str:
+    if amount is None:
+        return "unknown"
+    return f"${amount:.2f}"
 
-    Returns a dictionary with keys:
-        - ``decision`` (``"approve"`` | ``"reject"``)
-        - ``reasons`` (list of human-readable strings)
-        - ``confidence`` (float 0–1)
-        - ``violations`` (list of violated rule names)
-    """
-    description = str(invoice.get("description", "")).lower()
-    category = str(invoice.get("category", "")).strip().lower()
-    amount = float(invoice.get("amount", 0))
-    receipt = bool(invoice.get("receipt", False))
-    date_str = str(invoice.get("date", ""))
+
+def evaluate_invoice(invoice: Dict[str, Any]) -> Dict[str, Any]:
+    description = str(invoice.get("description", "")).strip()
+    description_lower = description.lower()
+    category = normalize_category(invoice.get("category", ""))
+    amount = parse_amount(invoice.get("amount"))
+    receipt = parse_receipt(invoice.get("receipt", False))
+    date_str = str(invoice.get("date", "")).strip()
 
     violations: List[str] = []
     reasons: List[str] = []
+    expected_reasoning: List[str] = []
 
-    # Rule 1 — receipt
-    if not receipt and is_receipt_required(amount):
-        violations.append("missing_receipt")
-        reasons.append(
-            f"Rejected: receipt is missing and amount ${amount:.2f} exceeds "
-            f"the ${RECEIPT_WAIVER_THRESHOLD:.2f} waiver threshold."
-        )
-
-    # Rule 2 — amount cap
-    if not is_valid_amount(amount):
+    if amount is None or amount <= 0:
+        violations.append("invalid_amount")
+        reasons.append("Rejected: amount is missing, non-numeric, or not greater than zero.")
+        expected_reasoning.append("amount is invalid")
+    elif amount > MAX_AMOUNT:
         violations.append("excessive_amount")
         reasons.append(
-            f"Rejected: amount ${amount:.2f} exceeds the policy cap of "
-            f"${MAX_AMOUNT:.2f}."
+            f"Rejected: amount {_format_amount(amount)} exceeds the policy limit of {_format_amount(MAX_AMOUNT)}."
+        )
+        expected_reasoning.append(
+            f"amount {_format_amount(amount)} exceeds the policy limit of {_format_amount(MAX_AMOUNT)}"
         )
 
-    # Rule 3 — category
+    if RECEIPT_REQUIRED and not receipt:
+        violations.append("missing_receipt")
+        reasons.append("Rejected: receipt is required for every reimbursable invoice.")
+        expected_reasoning.append("receipt is missing")
+
     if not is_valid_category(category):
         violations.append("invalid_category")
         reasons.append(
-            f"Rejected: category '{category}' is not in the list of "
-            f"allowed categories."
+            f"Rejected: category '{category or 'unknown'}' is not an allowed reimbursement category."
         )
+        expected_reasoning.append(f"category {category or 'unknown'} is not allowed")
 
-    # Rule 4 — future date
     if not is_valid_date(date_str):
         violations.append("invalid_date")
-        reasons.append(
-            f"Rejected: date '{date_str}' is invalid or in the future."
-        )
+        reasons.append(f"Rejected: date '{date_str or 'unknown'}' is invalid or in the future.")
+        expected_reasoning.append(f"date {date_str or 'unknown'} is invalid")
 
-    # Rule 5 — description red flags
     if has_reject_terms(description):
+        matched_terms = [term for term in REJECT_DESCRIPTION_TERMS if term in description_lower]
+        descriptor = matched_terms[0] if matched_terms else "policy-violating term"
         violations.append("description_red_flag")
         reasons.append(
-            "Rejected: description contains terms that violate expense policy."
+            f"Rejected: description contains the red-flag term '{descriptor}', which violates expense policy."
         )
+        expected_reasoning.append(f"description contains disallowed term {descriptor}")
 
     if violations:
-        confidence = 0.9 if len(violations) >= 2 else 0.7
+        confidence = 0.95 if len(violations) >= 2 else 0.88
         return {
             "decision": "reject",
             "reasons": reasons,
             "confidence": confidence,
             "violations": violations,
+            "expected_reasoning": expected_reasoning,
         }
 
-    # All checks passed
+    approval_reasons = [
+        f"Approved: amount {_format_amount(amount)} is within the {_format_amount(MAX_AMOUNT)} policy limit.",
+        f"Approved: category '{category}' is in the allowed reimbursement list.",
+        "Approved: receipt is present.",
+        f"Approved: date '{date_str}' is valid and not in the future.",
+    ]
+    approval_reasoning = [
+        f"amount {_format_amount(amount)} is within the {_format_amount(MAX_AMOUNT)} policy limit",
+        f"category {category} is allowed",
+        "receipt is present",
+        f"date {date_str} is valid",
+    ]
+
     return {
         "decision": "approve",
-        "reasons": [
-            f"Approved: amount ${amount:.2f} is within policy, "
-            f"category '{category}' is allowed, receipt is present, "
-            f"and date '{date_str}' is valid."
-        ],
-        "confidence": 0.9,
+        "reasons": approval_reasons,
+        "confidence": 0.92,
         "violations": [],
+        "expected_reasoning": approval_reasoning,
     }
