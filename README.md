@@ -1,55 +1,205 @@
-# Invoice Verification Environment
-A deterministic, OpenEnv-compatible Mini RL Environment designed to benchmark agent reasoning over expense reports.
+# 📄 Invoice Verification RL Environment
+
+A deterministic, OpenEnv-compatible reinforcement learning environment for evaluating agent decision-making and reasoning on invoice verification tasks.
+
+---
 
 ## 🚀 Overview
-This project treats invoice verification as an interactive RL-style environment rather than a simple classification task.
 
-## 🧠 Why This Project Stands Out
-- **RL-Style Agent Evaluation**: Moves beyond simple text classification into a fully interactive state-action-reward loop.
-- **Deterministic & Reproducible**: Full seed control ensures every run yields the exact same state transitions and results.
-- **Reasoning-Aware Rewards**: Agents are explicitly rewarded for matching key reasoning traits, preventing "right answer, wrong reason" scenarios.
-- **Deploy Anywhere**: Built totally API-first, making it instantly deployable locally, on OpenEnv, or Hugging Face.
+This project models invoice verification as an interactive RL-style environment instead of a simple classification problem. 
+
+Agents are required to:
+- Analyze structured invoice data
+- Make a decision (`approve` / `reject`)
+- Provide a reasoning explanation
+- Assign confidence
+
+Each action is evaluated using a reward function that considers both correctness and reasoning quality.
+
+---
+
+## 🧠 Why This Is Interesting
+
+- **Not just prediction** → State-action-reward loop
+- **Evaluates reasoning quality**, not just accuracy
+- **Designed for agent benchmarking**, not model training
+- **Deterministic** → Results are reproducible and comparable
+
+---
 
 ## ⚙️ Architecture
-- **InvoiceEnvironment (Core)**: The underlying state machine managing episodes, invoice selection, grading, and dynamic feedback.
-- **OpenEnvAdapter**: A standard wrapper that adheres to the OpenEnv specification, ensuring easy plug-and-play with external evaluation frameworks.
-- **FastAPI Backend**: Exposes the environment natively over HTTP to support remote agent inference.
-- **Inference Pipeline**: A robust `inference.py` test suite with rule-based fallbacks, deterministic tracking, and CLI ease of use.
-- **HF Space**: A custom Gradio interface wrapping the environment, exposing both web UI and API.
 
-## 📦 Setup Instructions
+### Core Components
+
+- **InvoiceEnvironment (`env/environment.py`)**  
+  Handles episode lifecycle, invoice sampling, and state transitions.
+
+- **Policy Engine (`env/policy.py`)**  
+  Defines the ground truth logic for approval/rejection.  
+  👉 *Single source of truth for correctness.*
+
+- **Grader (`env/grader.py`)**  
+  Computes reward based on:
+  - Decision correctness
+  - Reasoning quality (policy-aligned keywords)
+  - Explanation strength
+
+- **OpenEnv Adapter (`env/openenv_adapter.py`)**  
+  Wraps the environment to comply with OpenEnv:
+  - `reset()`
+  - `step()`
+  - `state` (property)
+
+- **FastAPI Backend (`api/main.py`)**  
+  Exposes environment via HTTP:
+  - Session-safe
+  - Per-user isolation
+  - Production-style API design
+
+- **Inference Pipeline (`inference.py`)**  
+  Runs evaluation:
+  - Rule-based agent
+  - Optional LLM agent
+  - Deterministic metrics tracking
+
+- **Hugging Face App (`hf_space/app.py`)**  
+  - API + Gradio UI
+  - Supports manual invoice testing
+
+---
+
+## 🔁 Environment Flow
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Env as Environment
+    Agent->>Env: POST /reset
+    Env-->>Agent: Observation
+    Agent->>Env: POST /step {"action": "approve", "reasoning": "..."}
+    Env-->>Agent: (Observation, Reward, Done, Info)
+```
+
+> [!NOTE]
+> Each session is isolated using a unique `session_id`.
+
+---
+
+## 📦 Setup
 
 ```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Run the API server
 uvicorn api.main:app --reload
 ```
+
+---
 
 ## 🧪 Run Evaluation
 
 ```bash
+# Run deterministic evaluation
 python inference.py --seed 42
+
+# Optional: Run with LLM agent
 python inference.py --use-llm
 ```
 
+> [!TIP]
+> If no API key is set when using `--use-llm`, it automatically falls back to the rule-based agent.
+
+---
+
 ## 🔌 API Endpoints
-The FastAPI server natively exposes the following routes for environment interaction:
-- `GET /`
-- `POST /reset`
-- `POST /step`
-- `GET /state`
-- `GET /metadata`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Health check |
+| `POST`| `/reset` | Start new episode |
+| `POST`| `/step` | Take action |
+| `GET` | `/state` | Get current state |
+| `GET` | `/metadata` | Environment schema |
+
+*All endpoints support `session_id` for isolation.*
+
+---
 
 ## 🤖 OpenEnv Compatibility
-The environment seamlessly plugs into major RL benchmarking suites via `OpenEnvAdapter`. The adapter wraps the underlying environment to support standard `reset` and `step` loop interfaces, returning structured observation, reward, done flag, and info payloads. Complete environment schema configuration is defined statically via `metadata.json`.
+
+The environment follows OpenEnv requirements:
+- `reset()` → `observation`
+- `step()` → `(observation, reward, done, info)`
+- `state` → `property` (serializable)
+
+*Environment schema is defined in `openenv.yaml`*
+
+---
 
 ## 🌐 Hugging Face Deployment
-Fully configured for Hugging Face Spaces. The `hf_space/app.py` script automatically mounts the core FastAPI application while also serving a clean Gradio web interface. All core environment endpoints remain interactively exposed out of the box.
 
-## 📊 Results
-Deterministic evaluation ensures identical outputs across runs when using the same seed, enabling reliable benchmarking.
+The HF app:
+- Exposes the same API as FastAPI
+- Includes a Gradio UI for testing
+- Maintains session isolation
 
-## 🏆 Why This Wins
-- Designed as an evaluation environment, not just a model
-- Deterministic runs make results reproducible and comparable
-- Reward function captures both correctness and reasoning quality
-- Clean API design allows easy integration with agents and external frameworks
+**Run locally:**
+```bash
+uvicorn hf_space.app:app --reload
+```
+
+---
+
+## 🎯 Reward Design
+
+Reward is computed as:
+- **Correct decision** → Base reward
+- **Policy-aligned reasoning** → Keyword match score
+- **Explanation quality** → Small bonus
+
+**Key properties:**
+- Bounded in `[0, 1]`
+- Cannot be trivially gamed
+- Requires meaningful reasoning for high scores
+
+---
+
+## 📊 Deterministic Evaluation
+
+```bash
+python inference.py --seed 42
+```
+- Same seed → Identical results
+- Enables reproducible benchmarking
+- Supports fair agent comparison
+
+---
+
+## 🏆 Key Strengths
+
+- Deterministic and reproducible
+- Policy-driven evaluation (no dataset leakage)
+- Reasoning-aware reward system
+- Session-safe API design
+- OpenEnv + Hugging Face ready
+
+---
+
+## 🧩 Example Use Cases
+
+- Benchmarking LLM reasoning
+- Testing agent decision-making
+- RL environment prototyping
+- Evaluation framework for structured tasks
+
+---
+
+## 🏁 Summary
+
+This project focuses on building a robust evaluation environment, not just a predictive model.
+
+It provides a controlled, reproducible setup for testing how well agents:
+- Understand structured data
+- Make decisions
+- Justify their reasoning
