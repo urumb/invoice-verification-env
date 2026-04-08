@@ -1,0 +1,28 @@
+{
+  "name": "invoice-verification",
+  "description": "RL environment for verifying invoices based on policy rules.",
+  "action_space": {
+    "decision": [
+      "approve",
+      "reject"
+    ],
+    "confidence": [
+      0,
+      1
+    ],
+    "reason": "string"
+  },
+  "observation_space": {
+    "fields": [
+      "amount",
+      "category",
+      "date",
+      "description",
+      "receipt"
+    ]
+  },
+  "reward_range": [
+    0,
+    1
+  ]
+}

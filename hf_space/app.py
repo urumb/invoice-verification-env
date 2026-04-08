@@ -10,9 +10,14 @@ from typing import Any, Dict
 import gradio as gr
 from fastapi import FastAPI, HTTPException
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(CURRENT_DIR)
+
+for candidate in (CURRENT_DIR, PARENT_DIR):
+    if os.path.isdir(os.path.join(candidate, "env")):
+        if candidate not in sys.path:
+            sys.path.insert(0, candidate)
+        break
 
 from env.models import Action, TaskRecord
 from env.openenv_adapter import OpenEnvAdapter

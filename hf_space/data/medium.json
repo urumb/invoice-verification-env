@@ -1,0 +1,156 @@
+[
+  {
+    "invoice": {
+      "amount": 75.5,
+      "category": "transportation",
+      "date": "2024-02-01",
+      "description": "Late-night rideshare home after approved overtime work",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["overtime", "transportation", "safety policy", "approved commute"]
+  },
+  {
+    "invoice": {
+      "amount": 149.99,
+      "category": "office_equipment",
+      "date": "2024-02-02",
+      "description": "Noise-cancelling headphones for productivity in an open office",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["productivity", "office equipment", "approved equipment", "business use"]
+  },
+  {
+    "invoice": {
+      "amount": 25.0,
+      "category": "meals",
+      "date": "2024-02-03",
+      "description": "Lunch interview with a candidate",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["no receipt", "missing documentation", "meals require receipt", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 1299.0,
+      "category": "electronics",
+      "date": "2024-02-04",
+      "description": "Laptop for design intern to complete project work",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["business equipment", "laptop", "project work", "approved purchase"]
+  },
+  {
+    "invoice": {
+      "amount": 8.5,
+      "category": "meals",
+      "date": "2024-02-05",
+      "description": "Morning coffee for employee personal consumption",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["personal consumption", "not a business meal", "daily expense", "unauthorized"]
+  },
+  {
+    "invoice": {
+      "amount": 540.2,
+      "category": "infrastructure",
+      "date": "2024-02-06",
+      "description": "Monthly cloud hosting costs for production systems",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["cloud infrastructure", "hosting", "operational expense", "business purpose"]
+  },
+  {
+    "invoice": {
+      "amount": 100.0,
+      "category": "health",
+      "date": "2024-02-07",
+      "description": "Gym membership covered by the company wellness program",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["wellness program", "approved perk", "employee benefit", "policy allowed"]
+  },
+  {
+    "invoice": {
+      "amount": 59.99,
+      "category": "software",
+      "date": "2024-02-08",
+      "description": "Video game license used for an approved remote team-building event",
+      "receipt": true
+    },
+    "decision": "approve",
+    "keywords": ["team building", "approved social expense", "business purpose", "event"]
+  },
+  {
+    "invoice": {
+      "amount": 800.0,
+      "category": "accommodation",
+      "date": "2024-02-09",
+      "description": "Two-night hotel stay for a seminar in the employee's home city",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["local event", "unnecessary hotel", "excessive accommodation", "should commute"]
+  },
+  {
+    "invoice": {
+      "amount": 15.0,
+      "category": "office_supplies",
+      "date": "2024-02-10",
+      "description": "Pens purchased for the shared office supply cabinet",
+      "receipt": false
+    },
+    "decision": "approve",
+    "keywords": ["small amount", "office supplies", "de minimis", "no receipt required"]
+  },
+  {
+    "invoice": {
+      "amount": 7500.0,
+      "category": "training",
+      "date": "2024-02-12",
+      "description": "Executive coaching retreat at luxury resort",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["excessive amount", "over policy cap", "luxury", "amount exceeds limit"]
+  },
+  {
+    "invoice": {
+      "amount": 320.0,
+      "category": "travel",
+      "date": "2024-02-13",
+      "description": "Taxi fare to airport with no receipt or documentation",
+      "receipt": false
+    },
+    "decision": "reject",
+    "keywords": ["no receipt", "missing documentation", "receipt required", "undocumented"]
+  },
+  {
+    "invoice": {
+      "amount": 450.0,
+      "category": "donations",
+      "date": "2024-02-14",
+      "description": "Charitable donation to local school on behalf of the company",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["invalid category", "donations not allowed", "not an expense category", "policy violation"]
+  },
+  {
+    "invoice": {
+      "amount": 200.0,
+      "category": "software",
+      "date": "2027-12-01",
+      "description": "Pre-purchase of design tool license for next fiscal year",
+      "receipt": true
+    },
+    "decision": "reject",
+    "keywords": ["future date", "invalid date", "not yet incurred", "date violation"]
+  }
+]
