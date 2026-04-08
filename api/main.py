@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
 from fastapi import Body, FastAPI, HTTPException
 
 from env.environment import InvoiceEnvironment
 from env.models import Action, Observation, ResetRequest, State, StepResult
+# Delay OpenEnvAdapter import or import safely if it brings extra deps
+from env.openenv_adapter import OpenEnvAdapter
 
 
 app = FastAPI(
@@ -17,6 +20,15 @@ environment = InvoiceEnvironment()
 @app.get("/")
 def root() -> dict[str, str]:
     return {"message": "Invoice Verification Environment is running."}
+
+
+@app.get("/metadata")
+def get_metadata() -> dict[str, Any]:
+    try:
+        adapter = OpenEnvAdapter()
+        return adapter.get_metadata()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/reset", response_model=Observation)

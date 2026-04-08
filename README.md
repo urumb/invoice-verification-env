@@ -1,71 +1,35 @@
-# Invoice Verification Environment
+# Invoice Verification RL Environment
 
-OpenEnv-compatible Python environment where an agent reviews an invoice and decides whether to approve or reject it based on company policy.
+## Overview
+The Invoice Verification Environment provides an RL-style setup for validating employee expense reports and invoices based on established company policy rules. It functions deterministically but allows building an AI or LLM-based agent policy that must decide whether to approve or reject invoices with confidence.
 
 ## Features
+- **Deterministic evaluation**: Fully supports setting random seeds to guarantee repeatable tests across difficulties.
+- **OpenEnv compatible**: Adapter allows drop-in support for any standard `OpenEnv` usage.
+- **Reward shaping**: Agents are rewarded based not only on correct decisions but also the quality and confidence of their explanations/reasoning.
+- **FastAPI endpoints**: Ready to be queried over HTTP.
+- **Hugging Face ready**: A Gradio wrapper is available to deploy cleanly to a Spaces project.
 
-- Typed `Action`, `Observation`, and `State` models with Pydantic
-- Strict `reset()`, `step()`, and `state()` environment flow
-- FastAPI service with `/reset`, `/step`, and `/state`
-- Three difficulty datasets with 10 tasks each
-- `inference.py` runner that calls the API and uses OpenAI when configured
-- Docker support on port `7860`
-
-## Project Structure
-
-```text
-invoice-verification-env/
-├── api/
-│   └── main.py
-├── data/
-│   ├── easy.json
-│   ├── hard.json
-│   └── medium.json
-├── env/
-│   ├── environment.py
-│   ├── grader.py
-│   ├── models.py
-│   └── tasks.py
-├── inference.py
-├── openenv.yaml
-├── Dockerfile
-├── requirements.txt
-└── README.md
-```
-
-## Local Setup
-
+## Run locally
+Launch the backend server locally:
 ```bash
-pip install -r requirements.txt
-uvicorn api.main:app --host 0.0.0.0 --port 7860
+uvicorn api.main:app --reload
 ```
 
-## API Endpoints
-
-- `POST /reset` with optional body `{"difficulty": "easy" | "medium" | "hard"}`
-- `POST /step` with an `Action` payload
-- `GET /state`
-
-## Run Inference
-
-`inference.py` will start the API automatically if it is not already running.
-
+## Run evaluation
+After starting the environment (or letting it automatically spawn the server), run the inference script to evaluate agents:
 ```bash
-python inference.py
+python inference.py --seed 42
 ```
-
-To use the OpenAI API, set:
-
+To run the OpenAI agent (ensure you have `OPENAI_API_KEY` set):
 ```bash
-export OPENAI_API_KEY=your_key
-export OPENAI_MODEL=gpt-4o-mini
+python inference.py --use-llm
 ```
 
-Without an API key, the script falls back to a deterministic heuristic agent so the project remains runnable.
+## Design Notes
+- A baseline **Rule-based agent** is used to ensure out-of-the-box evaluation without API keys.
+- **Reward depends on correctness + explanation quality**: Agents must mention matched reasoning traits.
+- Environment supports **multiple priority/difficulty levels** (`easy`, `medium`, `hard`) which varies the trickiness of the invoices.
 
-## Docker
-
-```bash
-docker build -t invoice-verification-env .
-docker run -p 7860:7860 invoice-verification-env
-```
+## Result
+Achieves consistent deterministic performance across runs. Ready for evaluation or local modification.

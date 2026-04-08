@@ -27,7 +27,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests
-from openai import OpenAI
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 from env.models import Action
 from env.policy import evaluate_invoice
@@ -252,9 +256,9 @@ class OpenAIInvoiceAgent:
     def __init__(self) -> None:
         self._fallback = RuleBasedAgent()
         self._api_key = os.getenv("OPENAI_API_KEY")
-        self._model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+        self._model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self._client: Optional[OpenAI] = (
-            OpenAI(api_key=self._api_key) if self._api_key else None
+            OpenAI(api_key=self._api_key) if self._api_key and OpenAI else None
         )
 
     def predict(self, invoice: Dict[str, Any]) -> Action:
@@ -517,7 +521,7 @@ def main() -> None:
 
     if args.use_llm:
         if not os.getenv("OPENAI_API_KEY"):
-            print("  [!] --use-llm specified but OPENAI_API_KEY is missing. Falling back to rule-based agent.")
+            print("LLM requested but no API key found. Falling back to rule-based agent.")
             agent = RuleBasedAgent()
             agent_label = "Rule-based (fallback)"
         else:

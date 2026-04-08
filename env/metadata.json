@@ -1,13 +1,27 @@
 {
   "name": "invoice-verification",
-  "description": "RL environment for verifying invoices based on policy rules",
+  "description": "RL environment for verifying invoices based on policy rules.",
   "action_space": {
-    "type": "discrete",
-    "values": ["approve", "reject"]
+    "decision": [
+      "approve",
+      "reject"
+    ],
+    "confidence": [
+      0,
+      1
+    ]
   },
   "observation_space": {
-    "type": "dict",
-    "fields": ["amount", "category", "date", "description", "receipt"]
+    "fields": [
+      "amount",
+      "category",
+      "date",
+      "description",
+      "receipt"
+    ]
   },
-  "reward_range": [0, 1]
+  "reward_range": [
+    0,
+    1
+  ]
 }

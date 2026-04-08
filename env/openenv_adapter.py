@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -9,17 +10,19 @@ from openenv.core import Environment
 from .environment import InvoiceEnvironment
 from .models import Action, Difficulty
 
-# ── Global Environment Registry ──
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+# Global registry
 _REGISTRY: Dict[str, type] = {}
 
 def register_environment(name: str, env_cls: type) -> None:
-    """Register an environment class globally."""
     _REGISTRY[name] = env_cls
 
 
 class OpenEnvAdapter(Environment):
-    """Adapter wrapping the core InvoiceEnvironment into openenv-core format."""
-
     def __init__(self, seed: Optional[int] = None) -> None:
         super().__init__()
         self._env = InvoiceEnvironment(seed=seed)
@@ -31,38 +34,79 @@ class OpenEnvAdapter(Environment):
         difficulty: Optional[Difficulty] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Reset the environment state and return observation."""
         result = self._env.reset(difficulty=difficulty, seed=seed)
-        return result.invoice
+        return {"invoice": result.invoice}
 
     def step(
-        self, action: Action, timeout_s: Optional[float] = None, **kwargs: Any
+        self,
+        action: Action | Dict[str, Any],
+        timeout_s: Optional[float] = None,
+        **kwargs: Any,
     ) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
-        """Take a step and return (observation, reward, done, info)."""
+
+        if not isinstance(action, Action):
+            action = Action(**action)
+
         result = self._env.step(action)
-        return (
-            result.observation.invoice,
-            result.reward,
-            result.done,
-            result.info,
-        )
+
+        observation = {"invoice": result.observation.invoice}
+        reward = result.reward
+        done = result.done
+        
+        info = dict(result.info) if result.info else {}
+        info["reason"] = getattr(action, "reason", "No reason provided")
+        info["confidence"] = getattr(action, "confidence", 0.0)
+        info["keywords_matched"] = info.get("matched_keywords", [])
+
+        return observation, reward, done, info
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Fetch metadata dictionary from env/metadata.json."""
         metadata_file = Path(__file__).parent / "metadata.json"
+        default_metadata: Dict[str, Any] = {
+            "name": "invoice-verification",
+            "description": "RL environment for verifying invoices based on policy rules",
+            "action_space": {
+                "decision": ["approve", "reject"],
+                "confidence": [0, 1]
+            },
+            "observation_space": {
+                "fields": ["amount", "category", "date", "description", "receipt"]
+            },
+            "reward_range": [0, 1]
+        }
+        
         if not metadata_file.exists():
-            return {}
-        with metadata_file.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            return default_metadata
+            
+        try:
+            with metadata_file.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {
+                "name": data.get("name", default_metadata["name"]),
+                "description": data.get("description", default_metadata["description"]),
+                "action_space": data.get("action_space", default_metadata["action_space"]),
+                "observation_space": data.get("observation_space", default_metadata["observation_space"]),
+                "reward_range": data.get("reward_range", default_metadata["reward_range"])
+            }
+        except (json.JSONDecodeError, OSError):
+            return default_metadata
 
     def state(self) -> Dict[str, Any]:
-        """Return the internal environment state."""
         st = self._env.state()
-        return {"step_count": st.step_count, "current_invoice": st.current_invoice}
+        return {
+            "step_count": st.step_count,
+            "current_invoice": st.current_invoice,
+        }
+
+    def seed(self, seed: int) -> None:
+        random.seed(seed)
+        if np is not None:
+            np.random.seed(seed)
+        if hasattr(self._env, "seed"):
+            self._env.seed(seed)
 
     def close(self) -> None:
-        """Cleanup logic if any."""
         pass
 
-# Automatically register our environment on import
+
 register_environment("invoice-verification", OpenEnvAdapter)
