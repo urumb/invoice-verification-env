@@ -25,11 +25,15 @@ _DEFAULT_METADATA: Dict[str, Any] = {
     "action_space": {
         "type": "object",
         "properties": {
-            "decision": {
+            "stage": {
                 "type": "string",
-                "enum": ["approve", "reject"],
+                "enum": ["analyze", "flag_issues", "final_decision"],
             },
-            "reason": {
+            "action": {
+                "type": "string",
+                "minLength": 1,
+            },
+            "reasoning": {
                 "type": "string",
                 "minLength": 1,
             },
@@ -39,16 +43,24 @@ _DEFAULT_METADATA: Dict[str, Any] = {
                 "maximum": 1,
             },
         },
-        "required": ["decision", "reason", "confidence"],
+        "required": ["stage", "action", "reasoning", "confidence"],
     },
     "observation_space": {
         "type": "object",
         "properties": {
+            "stage": {
+                "type": "string",
+                "enum": ["analyze", "flag_issues", "final_decision"],
+            },
             "invoice": {
                 "type": "object",
-            }
+            },
+            "previous_findings": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
         },
-        "required": ["invoice"],
+        "required": ["stage", "invoice", "previous_findings"],
     },
     "reward_range": [0, 1],
 }
@@ -78,7 +90,11 @@ class OpenEnvAdapter(Environment):
             self.seed(effective_seed)
 
         result = self._env.reset(difficulty=difficulty, seed=effective_seed)
-        return {"invoice": copy.deepcopy(result.invoice)}
+        return {
+            "stage": result.stage,
+            "invoice": copy.deepcopy(result.invoice),
+            "previous_findings": copy.deepcopy(result.previous_findings),
+        }
 
     def step(
         self,
@@ -91,11 +107,16 @@ class OpenEnvAdapter(Environment):
 
         result = self._env.step(action)
 
-        observation = {"invoice": copy.deepcopy(result.observation.invoice)}
+        observation = {
+            "stage": result.observation.stage,
+            "invoice": copy.deepcopy(result.observation.invoice),
+            "previous_findings": copy.deepcopy(result.observation.previous_findings),
+        }
         reward = float(result.reward)
         done = bool(result.done)
         info = copy.deepcopy(result.info) if result.info else {}
-        info["reason"] = action.reason
+        info["stage"] = action.stage
+        info["reasoning"] = action.reasoning
         info["confidence"] = action.confidence
         info["keywords_matched"] = info.get("matched_keywords", [])
 
@@ -122,6 +143,8 @@ class OpenEnvAdapter(Environment):
         return {
             "step_count": int(state.step_count),
             "current_invoice": copy.deepcopy(state.current_invoice),
+            "stage": state.stage,
+            "previous_findings": copy.deepcopy(state.previous_findings),
         }
 
     def seed(self, seed: int) -> None:

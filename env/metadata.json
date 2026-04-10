@@ -4,14 +4,19 @@
   "action_space": {
     "type": "object",
     "properties": {
-      "decision": {
+      "stage": {
         "type": "string",
         "enum": [
-          "approve",
-          "reject"
+          "analyze",
+          "flag_issues",
+          "final_decision"
         ]
       },
-      "reason": {
+      "action": {
+        "type": "string",
+        "minLength": 1
+      },
+      "reasoning": {
         "type": "string",
         "minLength": 1
       },
@@ -22,20 +27,37 @@
       }
     },
     "required": [
-      "decision",
-      "reason",
+      "stage",
+      "action",
+      "reasoning",
       "confidence"
     ]
   },
   "observation_space": {
     "type": "object",
     "properties": {
+      "stage": {
+        "type": "string",
+        "enum": [
+          "analyze",
+          "flag_issues",
+          "final_decision"
+        ]
+      },
       "invoice": {
         "type": "object"
+      },
+      "previous_findings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       }
     },
     "required": [
-      "invoice"
+      "stage",
+      "invoice",
+      "previous_findings"
     ]
   },
   "reward_range": [

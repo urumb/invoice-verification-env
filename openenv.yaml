@@ -8,12 +8,16 @@ entrypoint: api.main:app
 action_space:
   type: object
   properties:
-    decision:
+    stage:
       type: string
       enum:
-        - approve
-        - reject
-    reason:
+        - analyze
+        - flag_issues
+        - final_decision
+    action:
+      type: string
+      minLength: 1
+    reasoning:
       type: string
       minLength: 1
     confidence:
@@ -21,17 +25,26 @@ action_space:
       minimum: 0
       maximum: 1
   required:
-    - decision
-    - reason
+    - stage
+    - action
+    - reasoning
     - confidence
 
 observation_space:
   type: object
   properties:
+    stage:
+      type: string
     invoice:
       type: object
+    previous_findings:
+      type: array
+      items:
+        type: string
   required:
+    - stage
     - invoice
+    - previous_findings
 
 reward_range:
   - 0

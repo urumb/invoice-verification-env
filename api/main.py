@@ -33,8 +33,9 @@ class ResetPayload(BaseModel):
 
 class StepPayload(BaseModel):
     session_id: Optional[str] = None
-    decision: str
-    reason: str = Field(..., min_length=1)
+    stage: str
+    action: str = Field(..., min_length=1)
+    reasoning: str = Field(..., min_length=1)
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
@@ -140,9 +141,14 @@ def get_schema() -> SchemaResponse:
         observation={
             "type": "object",
             "properties": {
+                "stage": {"type": "string"},
                 "invoice": {"type": "object"},
+                "previous_findings": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
             },
-            "required": ["invoice"],
+            "required": ["stage", "invoice", "previous_findings"],
         },
         state=_model_schema(State),
     )
@@ -187,8 +193,9 @@ def step_environment(
     effective_session_id = request.session_id or session_id
     adapter, sid = _get_or_create_adapter(effective_session_id)
     action = Action(
-        decision=request.decision,
-        reason=request.reason,
+        stage=request.stage,
+        action=request.action,
+        reasoning=request.reasoning,
         confidence=request.confidence,
     )
 
@@ -221,6 +228,8 @@ def get_state(session_id: Optional[str] = Query(default=None)) -> SessionStateRe
     return SessionStateResponse(
         step_count=state.get("step_count", 0),
         current_invoice=state.get("current_invoice", {}),
+        stage=state.get("stage"),
+        previous_findings=state.get("previous_findings", []),
         session_id=sid,
     )
 
