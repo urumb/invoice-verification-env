@@ -5,7 +5,7 @@ import random
 from typing import Any, Dict, List, Optional, cast
 
 from .grader import build_feedback, grade
-from .models import Action, Difficulty, Observation, State, StepResult, TaskRecord
+from .models import Action, Difficulty, Observation, Reward, State, StepResult, TaskRecord
 from .tasks import get_random_task
 
 
@@ -253,7 +253,10 @@ class InvoiceEnvironment:
 
         return StepResult(
             observation=self._build_observation(),
-            reward=reward,
+            reward=Reward(
+                value=reward,
+                explanation=str(info.get("message", "Stage reward computed from grading rubric.")),
+            ),
             done=done,
             info=info,
         )

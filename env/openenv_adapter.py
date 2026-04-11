@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 from openenv.core import Environment
 
 from .environment import InvoiceEnvironment
-from .models import Action, Difficulty
+from .models import Action, Difficulty, dump_model
 
 try:
     import numpy as np
@@ -22,6 +22,11 @@ _REGISTRY: Dict[str, type] = {}
 _DEFAULT_METADATA: Dict[str, Any] = {
     "name": "invoice-verification",
     "description": "OpenEnv-compatible invoice verification environment.",
+    "reward_description": (
+        "Rewards are normalized to [0, 1]. Analysis and issue-flagging stages reward "
+        "field coverage and anomaly detection. The final decision stage rewards the "
+        "correct approve/reject action plus evidence-grounded reasoning."
+    ),
     "action_space": {
         "type": "object",
         "properties": {
@@ -112,13 +117,14 @@ class OpenEnvAdapter(Environment):
             "invoice": copy.deepcopy(result.observation.invoice),
             "previous_findings": copy.deepcopy(result.observation.previous_findings),
         }
-        reward = float(result.reward)
+        reward = float(result.reward.value)
         done = bool(result.done)
         info = copy.deepcopy(result.info) if result.info else {}
         info["stage"] = action.stage
         info["reasoning"] = action.reasoning
         info["confidence"] = action.confidence
         info["keywords_matched"] = info.get("matched_keywords", [])
+        info["reward"] = dump_model(result.reward)
 
         return observation, reward, done, info
 
@@ -139,6 +145,9 @@ class OpenEnvAdapter(Environment):
 
     @property
     def state(self) -> Dict[str, Any]:
+        return self.state_dict()
+
+    def state_dict(self) -> Dict[str, Any]:
         state = self._env.state()
         return {
             "step_count": int(state.step_count),

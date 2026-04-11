@@ -1,11 +1,15 @@
+spec_version: 1
 name: invoice-verification-env
 description: >
   OpenEnv-compatible environment for approving or rejecting employee invoices
-  against company policy. An agent receives an invoice observation and must
-  return an approve/reject decision with a policy-based reason and confidence.
-entrypoint: api.main:app
+  against company policy across three stages: analyze, flag_issues, and
+  final_decision.
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
 
-action_space:
+action_schema:
   type: object
   properties:
     stage:
@@ -17,9 +21,11 @@ action_space:
     action:
       type: string
       minLength: 1
+      description: Stage-specific action chosen by the agent.
     reasoning:
       type: string
       minLength: 1
+      description: Concise evidence-based reasoning for the chosen action.
     confidence:
       type: number
       minimum: 0
@@ -30,13 +36,18 @@ action_space:
     - reasoning
     - confidence
 
-observation_space:
+observation_schema:
   type: object
   properties:
     stage:
       type: string
+      enum:
+        - analyze
+        - flag_issues
+        - final_decision
     invoice:
       type: object
+      description: Full invoice payload including line items and anomaly hints.
     previous_findings:
       type: array
       items:
@@ -45,6 +56,38 @@ observation_space:
     - stage
     - invoice
     - previous_findings
+
+state_schema:
+  type: object
+  properties:
+    step_count:
+      type: integer
+      minimum: 0
+    current_invoice:
+      type: object
+    stage:
+      type:
+        - string
+        - "null"
+      enum:
+        - analyze
+        - flag_issues
+        - final_decision
+        - null
+    previous_findings:
+      type: array
+      items:
+        type: string
+  required:
+    - step_count
+    - current_invoice
+    - stage
+    - previous_findings
+
+reward_description: >
+  Reward is a normalized float in the range [0, 1]. Early stages reward
+  inspection coverage and issue detection; the final stage rewards the correct
+  approve/reject decision backed by invoice-grounded reasoning.
 
 reward_range:
   - 0

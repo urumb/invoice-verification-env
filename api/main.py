@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from env.models import Action, Difficulty, State
+from env.models import Action, Difficulty, Observation, State, schema_for
 from env.openenv_adapter import OpenEnvAdapter
 
 
@@ -88,12 +88,6 @@ def _get_or_create_adapter(session_id: Optional[str]) -> tuple[OpenEnvAdapter, s
     return adapter, sid
 
 
-def _model_schema(model_cls: type[BaseModel]) -> Dict[str, Any]:
-    if hasattr(model_cls, "model_json_schema"):
-        return model_cls.model_json_schema()
-    return model_cls.schema()
-
-
 def _reset_response(
     session_id: str,
     observation: Dict[str, Any],
@@ -137,20 +131,9 @@ def get_metadata() -> Dict[str, Any]:
 @app.get("/schema", response_model=SchemaResponse)
 def get_schema() -> SchemaResponse:
     return SchemaResponse(
-        action=_model_schema(Action),
-        observation={
-            "type": "object",
-            "properties": {
-                "stage": {"type": "string"},
-                "invoice": {"type": "object"},
-                "previous_findings": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                },
-            },
-            "required": ["stage", "invoice", "previous_findings"],
-        },
-        state=_model_schema(State),
+        action=schema_for(Action),
+        observation=schema_for(Observation),
+        state=schema_for(State),
     )
 
 

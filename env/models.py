@@ -19,7 +19,7 @@ class Action(BaseModel):
 
 class Observation(BaseModel):
     stage: Stage
-    invoice: Dict[str, Any]
+    invoice: Dict[str, Any] = Field(default_factory=dict)
     previous_findings: List[str] = Field(default_factory=list)
 
 
@@ -36,9 +36,14 @@ class TaskRecord(BaseModel):
     keywords: List[str]
 
 
+class Reward(BaseModel):
+    value: float = Field(..., ge=0.0, le=1.0)
+    explanation: str = Field(..., min_length=1)
+
+
 class StepResult(BaseModel):
     observation: Observation
-    reward: float = Field(..., ge=0.0, le=1.0)
+    reward: Reward
     done: bool
     info: Dict[str, Any]
 
@@ -46,3 +51,15 @@ class StepResult(BaseModel):
 class ResetRequest(BaseModel):
     difficulty: Optional[Difficulty] = None
     seed: Optional[int] = None
+
+
+def dump_model(model: BaseModel) -> Dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
+def schema_for(model_cls: type[BaseModel]) -> Dict[str, Any]:
+    if hasattr(model_cls, "model_json_schema"):
+        return model_cls.model_json_schema()
+    return model_cls.schema()
