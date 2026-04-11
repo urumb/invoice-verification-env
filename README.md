@@ -1,215 +1,175 @@
----
-title: Invoice Verification Env
-emoji: 📑
-colorFrom: blue
-colorTo: indigo
-sdk: streamlit
-sdk_version: 1.31.0
-app_file: app.py
-pinned: false
----
-# 📄 Invoice Verification RL Environment
+# 📄 Invoice Verification RL Environment (OpenEnv)
 
-A deterministic, OpenEnv-compatible reinforcement learning environment for evaluating agent decision-making and reasoning on invoice verification tasks.
+A deterministic, multi-step, multi-task reinforcement learning environment for evaluating agent reasoning in invoice verification.
 
 ---
 
 ## 🚀 Overview
 
-This project models invoice verification as an interactive RL-style environment instead of a simple classification problem. 
+This project models invoice verification as a **multi-step decision-making process**, not just classification.
 
-Agents are required to:
-- Analyze structured invoice data
-- Make a decision (`approve` / `reject`)
-- Provide a reasoning explanation
-- Assign confidence
+Agents must:
 
-Each action is evaluated using a reward function that considers both correctness and reasoning quality.
+1. Analyze invoice data
+2. Identify inconsistencies
+3. Make a final decision (approve/reject)
 
----
-
-## 🧠 Why This Is Interesting
-
-- **Not just prediction** → State-action-reward loop
-- **Evaluates reasoning quality**, not just accuracy
-- **Designed for agent benchmarking**, not model training
-- **Deterministic** → Results are reproducible and comparable
+Each action is evaluated using a **structured reward function** that considers correctness, reasoning, and confidence.
 
 ---
 
-## ⚙️ Architecture
+## 🧠 Key Highlights
 
-### Core Components
-
-- **InvoiceEnvironment (`env/environment.py`)**  
-  Handles episode lifecycle, invoice sampling, and state transitions.
-
-- **Policy Engine (`env/policy.py`)**  
-  Defines the ground truth logic for approval/rejection.  
-  👉 *Single source of truth for correctness.*
-
-- **Grader (`env/grader.py`)**  
-  Computes reward based on:
-  - Decision correctness
-  - Reasoning quality (policy-aligned keywords)
-  - Explanation strength
-
-- **OpenEnv Adapter (`env/openenv_adapter.py`)**  
-  Wraps the environment to comply with OpenEnv:
-  - `reset()`
-  - `step()`
-  - `state` (property)
-
-- **FastAPI Backend (`api/main.py`)**  
-  Exposes environment via HTTP:
-  - Session-safe
-  - Per-user isolation
-  - Production-style API design
-
-- **Inference Pipeline (`inference.py`)**  
-  Runs evaluation:
-  - Rule-based agent
-  - Optional LLM agent
-  - Deterministic metrics tracking
-
-- **Hugging Face App (`hf_space/app.py`)**  
-  - API + Gradio UI
-  - Supports manual invoice testing
+* 🔁 **Multi-step reasoning environment**
+* 📊 **Multi-task benchmark** (easy / medium / hard)
+* 🎯 **Deterministic evaluation (seed-based)**
+* 🤖 Supports **Rule-based + LLM agents**
+* 🧪 **Reproducible benchmarking setup**
+* ⚙️ Fully **OpenEnv compliant**
+* 🐳 Dockerized for deployment
 
 ---
 
-## 🔁 Environment Flow
+## 🧩 Task Design
 
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant Env as Environment
-    Agent->>Env: POST /reset
-    Env-->>Agent: Observation
-    Agent->>Env: POST /step {"action": "approve", "reasoning": "..."}
-    Env-->>Agent: (Observation, Reward, Done, Info)
+### 🟢 Easy
+
+* Clear valid/invalid invoices
+* Obvious errors (missing fields, incorrect totals)
+
+### 🟡 Medium
+
+* Subtle inconsistencies
+* Tax mismatches, rounding issues
+
+### 🔴 Hard
+
+* Complex reasoning required
+* Multiple conflicting fields
+* Vendor anomalies
+
+---
+
+## 🔁 Multi-Step Workflow
+
+Each episode follows:
+
+1. `inspect_invoice` → analyze fields
+2. `identify_issues` → detect problems
+3. `final_decision` → approve/reject
+
+---
+
+## 🎯 Reward Function
+
+Reward ∈ [0, 1], based on:
+
+* ✔ Decision correctness
+* 🧠 Reasoning quality
+* 📌 Issue identification
+* ⚠ Penalties for incorrect stage order
+
+---
+
+## 🤖 Agents
+
+### Rule-Based Agent
+
+* Deterministic logic
+* Serves as baseline
+
+### LLM Agent
+
+* Uses OpenAI-compatible API
+* Generates reasoning-based decisions
+* Supports structured JSON outputs
+
+---
+
+## 📊 Example Output
+
+```
+[START] task=easy env=invoice-verification-env model=gpt-4.1-mini
+[STEP] step=1 action=inspect_invoice reward=0.35 done=false error=null
+[STEP] step=2 action=identify_issues reward=0.50 done=false error=null
+[STEP] step=3 action=reject reward=0.80 done=true error=null
+[END] success=true steps=3 rewards=0.35,0.50,0.80
 ```
 
-> [!NOTE]
-> Each session is isolated using a unique `session_id`.
-
 ---
 
-## 📦 Setup
+## ⚙️ Setup
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
+```
 
-# Run the API server
+Run API:
+
+```bash
 uvicorn api.main:app --reload
 ```
 
----
-
-## 🧪 Run Evaluation
+Run evaluation:
 
 ```bash
-# Run deterministic evaluation
 python inference.py --seed 42
-
-# Optional: Run with LLM agent
-python inference.py --use-llm
+python inference.py --seed 42 --use-llm
 ```
 
-> [!TIP]
-> If no API key is set when using `--use-llm`, it automatically falls back to the rule-based agent.
+---
+
+## 🐳 Docker
+
+Build:
+
+```bash
+docker build -t invoice-env .
+```
+
+Run:
+
+```bash
+docker run -p 8000:8000 --env-file .env invoice-env
+```
 
 ---
 
 ## 🔌 API Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/` | Health check |
-| `POST`| `/reset` | Start new episode |
-| `POST`| `/step` | Take action |
-| `GET` | `/state` | Get current state |
-| `GET` | `/metadata` | Environment schema |
-
-*All endpoints support `session_id` for isolation.*
+* `POST /reset`
+* `POST /step`
+* `GET /state`
+* `GET /metadata`
 
 ---
 
-## 🤖 OpenEnv Compatibility
+## 📦 OpenEnv Compliance
 
-The environment follows OpenEnv requirements:
-- `reset()` → `observation`
-- `step()` → `(observation, reward, done, info)`
-- `state` → `property` (serializable)
+* ✔ reset(), step(), state()
+* ✔ Typed schemas
+* ✔ Deterministic rewards
+* ✔ openenv.yaml included
 
-*Environment schema is defined in `openenv.yaml`*
+Validated using:
 
----
-
-## 🌐 Hugging Face Deployment
-
-The HF app:
-- Exposes the same API as FastAPI
-- Includes a Gradio UI for testing
-- Maintains session isolation
-
-**Run locally:**
 ```bash
-uvicorn hf_space.app:app --reload
+openenv validate
 ```
 
 ---
 
-## 🎯 Reward Design
+## 🏆 Why This Stands Out
 
-Reward is computed as:
-- **Correct decision** → Base reward
-- **Policy-aligned reasoning** → Keyword match score
-- **Explanation quality** → Small bonus
+Unlike standard classification tasks, this project:
 
-**Key properties:**
-- Bounded in `[0, 1]`
-- Cannot be trivially gamed
-- Requires meaningful reasoning for high scores
-
----
-
-## 📊 Deterministic Evaluation
-
-```bash
-python inference.py --seed 42
-```
-- Same seed → Identical results
-- Enables reproducible benchmarking
-- Supports fair agent comparison
-
----
-
-## 🏆 Key Strengths
-
-- Deterministic and reproducible
-- Policy-driven evaluation (no dataset leakage)
-- Reasoning-aware reward system
-- Session-safe API design
-- OpenEnv + Hugging Face ready
-
----
-
-## 🧩 Example Use Cases
-
-- Benchmarking LLM reasoning
-- Testing agent decision-making
-- RL environment prototyping
-- Evaluation framework for structured tasks
+* Evaluates **reasoning, not just accuracy**
+* Provides **multi-step interaction**
+* Enables **agent benchmarking**
+* Ensures **reproducibility**
 
 ---
 
 ## 🏁 Summary
 
-This project focuses on building a robust evaluation environment, not just a predictive model.
-
-It provides a controlled, reproducible setup for testing how well agents:
-- Understand structured data
-- Make decisions
-- Justify their reasoning
+A complete OpenEnv-compatible RL environment for benchmarking intelligent agents on structured decision-making tasks like invoice verification.
