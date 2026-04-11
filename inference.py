@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--use-llm", action="store_true")
+    parser.add_argument("--eval", action="store_true")
     return parser.parse_args()
 
 
@@ -456,6 +457,37 @@ def run_task(env: CompatibleOpenEnv, client: Optional[OpenAI], seed: int, use_ll
     finally:
         print(f"[END] success={bool_str(success)} steps={steps} rewards={','.join(rewards)}")
 
+def run_eval_mode(env, client, seed, use_llm):
+    print("=" * 60)
+    print("  Invoice Verification - Evaluation Mode")
+    print(f"  Agent: {'llm' if use_llm else 'rule'} | Seed: {seed}")
+    print("=" * 60)
+
+    overall = []
+
+    for task in TASKS:
+        print(f"\n-- {task.upper()} --")
+
+        observation = env.reset(seed=seed, task=task)
+        done = False
+        step_rewards = []
+        final_action = None
+
+        while not done:
+            action = choose_action(observation, seed, use_llm, client)
+            observation, reward, done, _ = env.step(action)
+            step_rewards.append(reward)
+            final_action = action["action"]
+
+        avg = sum(step_rewards) / len(step_rewards)
+        overall.append(avg)
+
+        print(f"  decision={final_action} | avg_reward={avg:.4f}")
+
+    print("\n" + "=" * 60)
+    print("  SUMMARY")
+    print("=" * 60)
+    print(f"  overall avg reward: {sum(overall)/len(overall):.4f}")
 
 def main() -> None:
     args = parse_args()
@@ -474,11 +506,14 @@ def main() -> None:
     benchmark_name = load_env_name()
 
     try:
-        for task in TASKS:
-            run_task(env, client, args.seed, args.use_llm, task, benchmark_name)
+        if args.eval:
+            run_eval_mode(env, client, args.seed, args.use_llm)
+        else:
+            for task in TASKS:
+                run_task(env, client, args.seed, args.use_llm, task, benchmark_name)
     finally:
         try:
-            env.close()
+            env.close() 
         except Exception:
             pass
 
