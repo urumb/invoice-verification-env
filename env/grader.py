@@ -1,4 +1,4 @@
-"""Grading logic for the invoice verification environment."""
+﻿"""Grading logic for the invoice verification environment."""
 from __future__ import annotations
 
 import re
@@ -279,10 +279,10 @@ def _decision_feedback(
         reward += config["fact_weight"] * min(1.0, len(fact_hits) / max(1, min(len(fact_targets), 4)))
         reward += _clarity_score(action.reasoning, config["clarity_weight"])
     else:
-        reward = 0.0
+        reward = 0.01
 
     reward -= _consistency_penalty(action, true_decision, previous_findings)
-    reward = max(0.0, min(1.0, round(reward, 4)))
+    reward = max(0.01, min(0.99, round(reward, 4)))
 
     return {
         "reward": reward,
