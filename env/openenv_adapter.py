@@ -117,7 +117,7 @@ class OpenEnvAdapter(Environment):
             "invoice": copy.deepcopy(result.observation.invoice),
             "previous_findings": copy.deepcopy(result.observation.previous_findings),
         }
-        reward = float(result.reward.value)
+        reward = max(0.01, min(0.99, float(result.reward.value)))
         done = bool(result.done)
         info = copy.deepcopy(result.info) if result.info else {}
         info["stage"] = action.stage

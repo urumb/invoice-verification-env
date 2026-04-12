@@ -41,7 +41,7 @@ class StepPayload(BaseModel):
 
 class EpisodeResponse(BaseModel):
     observation: Dict[str, Any]
-    reward: float = Field(..., ge=0.0, le=1.0)
+    reward: float = Field(..., gt=0.0, lt=1.0)
     done: bool
     info: Dict[str, Any]
     session_id: str
@@ -97,7 +97,7 @@ def _reset_response(
 ) -> EpisodeResponse:
     return EpisodeResponse(
         observation=observation,
-        reward=0.0,
+        reward=0.01,
         done=False,
         info={
             "session_id": session_id,
