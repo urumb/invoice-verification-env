@@ -1,4 +1,4 @@
-﻿"""Grading logic for the invoice verification environment."""
+"""Grading logic for the invoice verification environment."""
 from __future__ import annotations
 
 import re
@@ -125,9 +125,14 @@ def _is_vague(reason: str) -> bool:
     return len(_meaningful_tokens(reason)) < 4
 
 
+def clamp_score(score: float) -> float:
+    """Clamp a score to the open interval (0, 1)."""
+    return max(0.01, min(0.99, float(score)))
+
+
 def _clarity_score(reason: str, max_score: float) -> float:
     if _is_vague(reason):
-        return 0.0
+        return 0.0  # internal sub-score, clamped at caller
     return round(max_score, 4)
 
 
@@ -196,9 +201,10 @@ def _analysis_feedback(action: Action, ground_truth: TaskRecord, task: str) -> D
     hits = [name for name in target_fields if name in _normalize_phrase(action.reasoning)]
     coverage = len(hits) / max(1, len(target_fields))
     reward = 0.10 + (0.20 * coverage) + _clarity_score(action.reasoning, 0.05)
+    reward = clamp_score(round(reward, 4))
     captured_findings = [field_findings[name] for name in hits if name in field_findings]
     return {
-        "reward": reward,
+        "reward": clamp_score(reward),
         "captured_findings": captured_findings,
         "matched_keywords": hits,
         "matched_fact_targets": captured_findings,
@@ -213,17 +219,17 @@ def _issue_feedback(action: Action, ground_truth: TaskRecord, task: str) -> Dict
     targets = _issue_targets(task, invoice, str(ground_truth.decision))
     hits = matched_keywords(action.reasoning, targets)
     denominator = max(1, len(targets))
-    reward = 0.10 + (_task_config(task)["issue_weight"] * min(1.0, len(hits) / denominator))
+    reward = 0.10 + (_task_config(task)["issue_weight"] * clamp_score(len(hits) / denominator))
     reward += _clarity_score(action.reasoning, 0.05)
     if not invoice.get("anomaly_flags"):
         lowered = action.reasoning.lower()
         if "no issues" in lowered or "no policy issues" in lowered or "consistent" in lowered:
             hits = _dedupe_preserve_order(hits + ["no policy issues"])
             reward += 0.05
-    reward = min(1.0, reward)
+    reward = clamp_score(round(reward, 4))
     captured_findings = hits or (["no policy issues"] if not invoice.get("anomaly_flags") else [])
     return {
-        "reward": reward,
+        "reward": clamp_score(reward),
         "captured_findings": captured_findings,
         "matched_keywords": hits,
         "matched_fact_targets": hits,
@@ -275,17 +281,17 @@ def _decision_feedback(
 
     if decision_correct:
         reward = config["decision_weight"]
-        reward += config["reasoning_weight"] * min(1.0, len(keyword_hits) / max(1, len(reasoning_targets)))
-        reward += config["fact_weight"] * min(1.0, len(fact_hits) / max(1, min(len(fact_targets), 4)))
+        reward += config["reasoning_weight"] * clamp_score(len(keyword_hits) / max(1, len(reasoning_targets)))
+        reward += config["fact_weight"] * clamp_score(len(fact_hits) / max(1, min(len(fact_targets), 4)))
         reward += _clarity_score(action.reasoning, config["clarity_weight"])
     else:
         reward = 0.01
 
     reward -= _consistency_penalty(action, true_decision, previous_findings)
-    reward = max(0.01, min(0.99, round(reward, 4)))
+    reward = clamp_score(round(reward, 4))
 
     return {
-        "reward": reward,
+        "reward": clamp_score(reward),
         "captured_findings": [f"final decision {action.action.strip().lower()}"],
         "matched_keywords": keyword_hits,
         "matched_fact_targets": fact_hits,
@@ -312,11 +318,11 @@ def evaluate_stage(
 
     stage_correct = action.stage == expected_stage
     wrong_stage_penalty = 0.15 if not stage_correct else 0.0
-    reward = max(0.01, min(0.99, round(feedback["reward"] - wrong_stage_penalty, 4)))
+    reward = clamp_score(round(feedback["reward"] - wrong_stage_penalty, 4))
 
     feedback.update(
         {
-            "reward": reward,
+            "reward": clamp_score(reward),
             "task": task,
             "expected_stage": expected_stage,
             "stage_correct": stage_correct,
@@ -335,7 +341,7 @@ def grade(
     previous_findings: Iterable[str],
 ) -> float:
     score = float(evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)["reward"])
-    return max(0.01, min(0.99, score))
+    return clamp_score(score)
 
 
 def build_feedback(
@@ -347,5 +353,5 @@ def build_feedback(
     reward: float,
 ) -> Dict[str, Any]:
     feedback = evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)
-    feedback["reward"] = float(max(0.01, min(0.99, reward)))
+    feedback["reward"] = clamp_score(reward)
     return feedback
