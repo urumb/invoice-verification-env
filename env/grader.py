@@ -355,18 +355,30 @@ def evaluate_stage(
 
 
 def grade(
-    action: Action,
-    ground_truth: TaskRecord,
-    task: str,
-    expected_stage: Stage,
-    previous_findings: Iterable[str],
+    action,
+    ground_truth,
+    task,
+    expected_stage,
+    previous_findings,
 ) -> float:
-    score = float(evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)["reward"])
+    raw = evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)["reward"]
+
+    try:
+        score = float(raw)
+    except:
+        score = 0.5
+
     if score <= 0:
-        score = 0.01
-    elif score >= 1:
-        score = 0.99
-    return score
+        return 0.01
+    if score >= 1:
+        return 0.99
+
+    if score == 0.0:
+        return 0.01
+    if score == 1.0:
+        return 0.99
+
+    return float(score)
 
 
 def build_feedback(
