@@ -206,7 +206,7 @@ def _analysis_feedback(action: Action, ground_truth: TaskRecord, task: str) -> D
     hits = [name for name in target_fields if name in _normalize_phrase(action.reasoning)]
     coverage = len(hits) / max(1, len(target_fields))
     reward = 0.10 + (0.20 * coverage) + _clarity_score(action.reasoning, 0.05)
-    reward = float(round(reward, 4))
+    reward = float(reward)
     if reward <= 0:
         reward = 0.01
     elif reward >= 1:
@@ -235,7 +235,7 @@ def _issue_feedback(action: Action, ground_truth: TaskRecord, task: str) -> Dict
         if "no issues" in lowered or "no policy issues" in lowered or "consistent" in lowered:
             hits = _dedupe_preserve_order(hits + ["no policy issues"])
             reward += 0.05
-    reward = float(round(reward, 4))
+    reward = float(reward)
     if reward <= 0:
         reward = 0.01
     elif reward >= 1:
@@ -301,7 +301,7 @@ def _decision_feedback(
         reward = 0.01
 
     reward -= _consistency_penalty(action, true_decision, previous_findings)
-    reward = float(round(reward, 4))
+    reward = float(reward)
     if reward <= 0:
         reward = 0.01
     elif reward >= 1:
@@ -335,15 +335,19 @@ def evaluate_stage(
 
     stage_correct = action.stage == expected_stage
     wrong_stage_penalty = 0.15 if not stage_correct else 0.0
-    reward = float(round(feedback["reward"] - wrong_stage_penalty, 4))
+    
+    reward = float(feedback["reward"] - wrong_stage_penalty)
+
     if reward <= 0:
         reward = 0.01
     elif reward >= 1:
         reward = 0.99
+        
+    assert 0 < reward < 1, f"Invalid reward: {reward}"
 
     feedback.update(
         {
-            "reward": reward,
+            "reward": float(reward),
             "task": task,
             "expected_stage": expected_stage,
             "stage_correct": stage_correct,
@@ -368,17 +372,14 @@ def grade(
     except:
         score = 0.5
 
+    score = float(score)
+
     if score <= 0:
-        return 0.01
-    if score >= 1:
-        return 0.99
+        score = 0.01
+    elif score >= 1:
+        score = 0.99
 
-    if score == 0.0:
-        return 0.01
-    if score == 1.0:
-        return 0.99
-
-    return float(score)
+    return score
 
 
 def build_feedback(
@@ -395,5 +396,5 @@ def build_feedback(
         final_reward = 0.01
     elif final_reward >= 1:
         final_reward = 0.99
-    feedback["reward"] = final_reward
+    feedback["reward"] = float(final_reward)
     return feedback
