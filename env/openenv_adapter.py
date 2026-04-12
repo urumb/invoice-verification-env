@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from openenv_   core import Environment
+from openenv_core import Environment
 
 from .environment import InvoiceEnvironment
 from .models import Action, Difficulty, dump_model
