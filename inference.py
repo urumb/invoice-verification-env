@@ -389,6 +389,7 @@ def request_model_action(client: OpenAI, observation: Dict[str, Any], seed: int)
         {"role": "user", "content": json.dumps(request_payload, ensure_ascii=True, sort_keys=True)},
     ]
 
+    print("LLM CALL EXECUTED")
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
@@ -415,8 +416,9 @@ def choose_action(
     use_llm: bool,
     client: Optional[OpenAI],
 ) -> Dict[str, Any]:
-    if not use_llm or client is None:
-        return rule_based_action(observation)
+    # ALWAYS use LLM - never fall back to rule-based during inference
+    if client is None:
+        raise RuntimeError("OpenAI client is not initialized - cannot make LLM call")
     return request_model_action(client, observation, seed)
 
 
@@ -490,26 +492,28 @@ def main() -> None:
     args = parse_args()
     seed_everything(args.seed)
 
-    client = None
-    if args.use_llm:
-        if not API_BASE_URL:
-            raise RuntimeError("API_BASE_URL environment variable is required when using --use-llm")
-        if not API_KEY:
-            raise RuntimeError("API_KEY environment variable is required when using --use-llm")
-        client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=API_KEY,
-        )
+    # ALWAYS initialize OpenAI client - LLM is mandatory for Phase 2
+    if not API_BASE_URL:
+        raise RuntimeError("API_BASE_URL environment variable is required")
+    if not API_KEY:
+        raise RuntimeError("API_KEY environment variable is required")
+    client = OpenAI(
+        base_url=API_BASE_URL,
+        api_key=API_KEY,
+    )
 
     env = CompatibleOpenEnv(seed=args.seed)
     benchmark_name = load_env_name()
 
+    # Always use LLM regardless of --use-llm flag
+    use_llm = True
+
     try:
         if args.eval:
-            run_eval_mode(env, client, args.seed, args.use_llm)
+            run_eval_mode(env, client, args.seed, use_llm)
         else:
             for task in TASKS:
-                run_task(env, client, args.seed, args.use_llm, task, benchmark_name)
+                run_task(env, client, args.seed, use_llm, task, benchmark_name)
     finally:
         try:
             env.close() 
