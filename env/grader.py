@@ -312,7 +312,7 @@ def evaluate_stage(
 
     stage_correct = action.stage == expected_stage
     wrong_stage_penalty = 0.15 if not stage_correct else 0.0
-    reward = max(0.0, min(1.0, round(feedback["reward"] - wrong_stage_penalty, 4)))
+    reward = max(0.01, min(0.99, round(feedback["reward"] - wrong_stage_penalty, 4)))
 
     feedback.update(
         {
@@ -334,7 +334,8 @@ def grade(
     expected_stage: Stage,
     previous_findings: Iterable[str],
 ) -> float:
-    return float(evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)["reward"])
+    score = float(evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)["reward"])
+    return max(0.01, min(0.99, score))
 
 
 def build_feedback(
@@ -346,5 +347,5 @@ def build_feedback(
     reward: float,
 ) -> Dict[str, Any]:
     feedback = evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)
-    feedback["reward"] = float(max(0.0, min(1.0, reward)))
+    feedback["reward"] = float(max(0.01, min(0.99, reward)))
     return feedback
