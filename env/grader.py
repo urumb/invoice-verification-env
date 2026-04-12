@@ -206,10 +206,14 @@ def _analysis_feedback(action: Action, ground_truth: TaskRecord, task: str) -> D
     hits = [name for name in target_fields if name in _normalize_phrase(action.reasoning)]
     coverage = len(hits) / max(1, len(target_fields))
     reward = 0.10 + (0.20 * coverage) + _clarity_score(action.reasoning, 0.05)
-    reward = clamp_score(round(reward, 4))
+    reward = float(round(reward, 4))
+    if reward <= 0:
+        reward = 0.01
+    elif reward >= 1:
+        reward = 0.99
     captured_findings = [field_findings[name] for name in hits if name in field_findings]
     return {
-        "reward": clamp_score(reward),
+        "reward": reward,
         "captured_findings": captured_findings,
         "matched_keywords": hits,
         "matched_fact_targets": captured_findings,
@@ -231,10 +235,14 @@ def _issue_feedback(action: Action, ground_truth: TaskRecord, task: str) -> Dict
         if "no issues" in lowered or "no policy issues" in lowered or "consistent" in lowered:
             hits = _dedupe_preserve_order(hits + ["no policy issues"])
             reward += 0.05
-    reward = clamp_score(round(reward, 4))
+    reward = float(round(reward, 4))
+    if reward <= 0:
+        reward = 0.01
+    elif reward >= 1:
+        reward = 0.99
     captured_findings = hits or (["no policy issues"] if not invoice.get("anomaly_flags") else [])
     return {
-        "reward": clamp_score(reward),
+        "reward": reward,
         "captured_findings": captured_findings,
         "matched_keywords": hits,
         "matched_fact_targets": hits,
@@ -293,10 +301,14 @@ def _decision_feedback(
         reward = 0.01
 
     reward -= _consistency_penalty(action, true_decision, previous_findings)
-    reward = clamp_score(round(reward, 4))
+    reward = float(round(reward, 4))
+    if reward <= 0:
+        reward = 0.01
+    elif reward >= 1:
+        reward = 0.99
 
     return {
-        "reward": clamp_score(reward),
+        "reward": reward,
         "captured_findings": [f"final decision {action.action.strip().lower()}"],
         "matched_keywords": keyword_hits,
         "matched_fact_targets": fact_hits,
@@ -323,11 +335,15 @@ def evaluate_stage(
 
     stage_correct = action.stage == expected_stage
     wrong_stage_penalty = 0.15 if not stage_correct else 0.0
-    reward = clamp_score(round(feedback["reward"] - wrong_stage_penalty, 4))
+    reward = float(round(feedback["reward"] - wrong_stage_penalty, 4))
+    if reward <= 0:
+        reward = 0.01
+    elif reward >= 1:
+        reward = 0.99
 
     feedback.update(
         {
-            "reward": clamp_score(reward),
+            "reward": reward,
             "task": task,
             "expected_stage": expected_stage,
             "stage_correct": stage_correct,
@@ -346,7 +362,11 @@ def grade(
     previous_findings: Iterable[str],
 ) -> float:
     score = float(evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)["reward"])
-    return clamp_score(score)
+    if score <= 0:
+        score = 0.01
+    elif score >= 1:
+        score = 0.99
+    return score
 
 
 def build_feedback(
@@ -358,5 +378,10 @@ def build_feedback(
     reward: float,
 ) -> Dict[str, Any]:
     feedback = evaluate_stage(action, ground_truth, task, expected_stage, previous_findings)
-    feedback["reward"] = clamp_score(reward)
+    final_reward = float(reward)
+    if final_reward <= 0:
+        final_reward = 0.01
+    elif final_reward >= 1:
+        final_reward = 0.99
+    feedback["reward"] = final_reward
     return feedback
