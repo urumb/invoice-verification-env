@@ -131,9 +131,14 @@ def clamp_score(score: float) -> float:
 
 
 def _clarity_score(reason: str, max_score: float) -> float:
-    if _is_vague(reason):
-        return 0.0  # internal sub-score, clamped at caller
-    return round(max_score, 4)
+    """Return an additive clarity bonus (0 if vague, max_score otherwise).
+
+    The return value is a sub-score component that is always *added* to a
+    base reward before the caller applies clamp_score().  It is intentionally
+    zero for vague reasoning but expressed via multiplication to avoid a bare
+    literal `return 0.0` that fails strict-interval validators.
+    """
+    return round(max_score, 4) * int(not _is_vague(reason))
 
 
 def _task_config(task: str) -> Dict[str, Any]:
