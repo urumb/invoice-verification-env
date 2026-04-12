@@ -21,9 +21,9 @@ except ImportError:
     np = None
 
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+API_BASE_URL = os.environ.get("API_BASE_URL", "")
+API_KEY = os.environ.get("API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 STAGES = ("analyze", "flag_issues", "final_decision")
 TASKS = ("easy", "medium", "hard")
 
@@ -389,26 +389,23 @@ def request_model_action(client: OpenAI, observation: Dict[str, Any], seed: int)
         {"role": "user", "content": json.dumps(request_payload, ensure_ascii=True, sort_keys=True)},
     ]
 
-    content = ""
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0,
-            top_p=1,
-            response_format={"type": "json_object"},
-        )
-        if getattr(response, "choices", None):
-            content = _message_text(response.choices[0].message)
-    except Exception:
-        content = ""
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        temperature=0,
+        top_p=1,
+        response_format={"type": "json_object"},
+    )
+    if not getattr(response, "choices", None):
+        raise RuntimeError("LLM returned no choices")
+    content = _message_text(response.choices[0].message)
 
     parsed = extract_json_object(content)
     if parsed is None:
-        return rule_based_action(observation)
+        raise RuntimeError(f"LLM returned unparseable response: {content!r}")
     normalized = normalize_action(parsed, observation, seed)
     if normalized is None:
-        return rule_based_action(observation)
+        raise RuntimeError(f"LLM response failed normalization: {parsed!r}")
     return normalized
 
 
@@ -495,11 +492,13 @@ def main() -> None:
 
     client = None
     if args.use_llm:
-        if not HF_TOKEN:
-            raise RuntimeError("HF_TOKEN or OPENAI_API_KEY environment variable is required")
+        if not API_BASE_URL:
+            raise RuntimeError("API_BASE_URL environment variable is required when using --use-llm")
+        if not API_KEY:
+            raise RuntimeError("API_KEY environment variable is required when using --use-llm")
         client = OpenAI(
             base_url=API_BASE_URL,
-            api_key=HF_TOKEN,
+            api_key=API_KEY,
         )
 
     env = CompatibleOpenEnv(seed=args.seed)
