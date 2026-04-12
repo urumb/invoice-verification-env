@@ -1,7 +1,16 @@
+---
+title: Invoice Verification Env
+emoji: 📑
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # 📄 Invoice Verification RL Environment (OpenEnv)
 
 A deterministic, multi-step, multi-task reinforcement learning environment for evaluating agent reasoning in invoice verification.
-
+  
 ---
 
 ## 🚀 Overview
